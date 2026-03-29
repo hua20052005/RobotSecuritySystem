@@ -1,0 +1,60 @@
+# inference_config.yaml - 推理引擎配置文件
+
+# 模型配置
+models:
+  transformer:
+    enabled: true
+    weight: 0.4
+    model_path: "models/transformer_model.pth"
+
+  anomaly_detector:
+    enabled: true
+    weight: 0.3
+    model_path: "models/anomaly_detector.pth"
+
+  ensemble_classifier:
+    enabled: true
+    weight: 0.3
+    model_path: "models/ensemble_classifier.pkl"
+
+# 检测阈值
+thresholds:
+  rule_confidence: 0.8      # 规则检测置信度阈值
+  ml_confidence: 0.7        # ML检测置信度阈值
+  combined_confidence: 0.75 # 融合检测置信度阈值
+
+# 特征处理
+feature_normalization: "standard"  # 归一化方法: "standard", "minmax", "none"
+normalization_params: null         # 归一化参数，如果为null则自动计算
+
+# 序列处理
+max_sequence_length: 512          # 最大序列长度
+vocab_size: 5000                  # 词汇表大小
+
+# 性能配置
+batch_size: 32                    # 批处理大小
+num_workers: 4                    # 数据加载器工作进程数
+pin_memory: true                  # 是否固定内存
+
+# 设备配置
+device: "auto"                    # 计算设备: "auto", "cpu", "cuda"
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/inference.log"
+
+# 缓存配置
+cache:
+  enabled: true
+  max_size: 1000
+  ttl: 3600  # 缓存生存时间(秒)
+
+# 监控配置
+monitoring:
+  enabled: true
+  metrics_interval: 60  # 指标收集间隔(秒)
+  alert_thresholds:
+    high_latency: 1.0   # 高延迟阈值(秒)
+    high_memory: 0.8    # 高内存使用率阈值

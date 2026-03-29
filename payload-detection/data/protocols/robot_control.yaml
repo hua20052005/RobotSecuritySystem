@@ -1,0 +1,16 @@
+# 示例自定义协议：机器人控制协议
+name: robot_control
+description: 具身智能机器人控制协议
+fields:
+  - name: command_id
+    type: int
+    length: 2
+  - name: robot_id
+    type: int
+    length: 4
+  - name: action
+    type: str
+    length: 10
+  - name: data
+    type: bytes
+    length: 16

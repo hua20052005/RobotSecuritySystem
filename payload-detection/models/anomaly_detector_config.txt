@@ -1,0 +1,11 @@
+“Ï≥£ºÏ≤‚ƒ£–Õ≈‰÷√
+==================================================
+
+model_type: IsolationForestAnomalyDetector
+n_estimators: 100
+contamination: 0.1000
+feature_dim: 42
+training_samples: 175341
+data_source: UNSW-NB15
+attack_ratio: 0.6806
+normal_ratio: 0.3194

@@ -1,0 +1,51 @@
+# 自定义攻击规则（具身智能相关）
+rules:
+  - id: robot_command_injection
+    name: "Robot Command Injection"
+    pattern: "(?i)(move|turn|stop|execute).*;"
+    severity: critical
+    category: custom
+    description: "机器人命令注入"
+
+  - id: sensor_data_tampering
+    name: "Sensor Data Tampering"
+    pattern: "(?i)(sensor|imu|gps).*\\d+\\.\\d+"
+    severity: high
+    category: custom
+    description: "传感器数据篡改"
+    condition: "abs(float(value) - expected) > threshold"
+
+  - id: mavlink_injection
+    name: "MAVLink Injection"
+    pattern: "(?i)fe\\d\\d"
+    severity: high
+    category: custom
+    description: "MAVLink协议注入"
+
+  - id: ros_topic_hijack
+    name: "ROS Topic Hijack"
+    pattern: "(?i)/\\w+/\\w+"
+    severity: medium
+    category: custom
+    description: "ROS话题劫持"
+
+  - id: dds_attack
+    name: "DDS Attack"
+    pattern: "(?i)rtps|dds"
+    severity: medium
+    category: custom
+    description: "DDS协议攻击"
+
+  - id: cyber_rt_anomaly
+    name: "Cyber RT Anomaly"
+    pattern: "(?i)cyber|apollo"
+    severity: high
+    category: custom
+    description: "Cyber RT异常"
+
+  - id: industrial_protocol_exploit
+    name: "Industrial Protocol Exploit"
+    pattern: "(?i)(modbus|dnp3|iec104|opc).*write"
+    severity: critical
+    category: custom
+    description: "工业协议利用"

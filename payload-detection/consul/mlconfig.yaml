@@ -1,0 +1,13 @@
+# ML配置
+model:
+  transformer:
+    d_model: 384
+    nhead: 8
+    num_layers: 6
+  anomaly:
+    threshold: 0.8
+  classifier:
+    type: lightgbm
+weights:
+  rule: 0.3
+  ml: 0.7

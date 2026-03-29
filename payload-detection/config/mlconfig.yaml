@@ -1,0 +1,176 @@
+# mlconfig.yaml - ML模型配置文件
+
+# Transformer模型配置
+transformer:
+  # 模型架构
+  vocab_size: 5000
+  max_len: 512
+  d_model: 256
+  n_heads: 8
+  n_layers: 6
+  d_ff: 1024
+  dropout: 0.1
+
+  # 训练配置
+  learning_rate: 0.001
+  batch_size: 32
+  epochs: 100
+  warmup_steps: 4000
+  weight_decay: 0.01
+
+  # 优化器配置
+  optimizer:
+    type: "adam"
+    beta1: 0.9
+    beta2: 0.999
+    eps: 1e-8
+
+  # 学习率调度器
+  scheduler:
+    type: "cosine"
+    warmup_ratio: 0.1
+
+# 异常检测模型配置
+anomaly_detector:
+  # Deep SVDD配置
+  input_dim: 43
+  hidden_dims: [128, 64, 32]
+  latent_dim: 16
+  dropout: 0.1
+
+  # 训练配置
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 150
+  weight_decay: 1e-6
+
+  # 异常检测参数
+  nu: 0.1  # 异常样本比例
+  R: 0.0   # 初始球体半径
+
+  # 优化器
+  optimizer:
+    type: "adam"
+    beta1: 0.9
+    beta2: 0.98
+    eps: 1e-8
+
+# 集成分类器配置
+ensemble_classifier:
+  # 模型列表
+  models:
+    - name: "lightgbm"
+      type: "lgb"
+      params:
+        n_estimators: 100
+        max_depth: 6
+        learning_rate: 0.1
+        subsample: 0.8
+        colsample_bytree: 0.8
+
+    - name: "xgboost"
+      type: "xgb"
+      params:
+        n_estimators: 100
+        max_depth: 6
+        learning_rate: 0.1
+        subsample: 0.8
+        colsample_bytree: 0.8
+
+    - name: "random_forest"
+      type: "rf"
+      params:
+        n_estimators: 100
+        max_depth: 10
+        min_samples_split: 2
+        min_samples_leaf: 1
+
+    - name: "mlp"
+      type: "mlp"
+      params:
+        hidden_layer_sizes: [128, 64, 32]
+        activation: "relu"
+        solver: "adam"
+        alpha: 0.0001
+        learning_rate: "adaptive"
+        max_iter: 200
+
+  # 集成方法
+  ensemble_method: "weighted_voting"  # "voting", "weighted_voting", "stacking"
+
+  # 训练配置
+  cv_folds: 5
+  random_state: 42
+
+# 训练通用配置
+training:
+  # 数据分割
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+  # 早停
+  early_stopping:
+    patience: 10
+    min_delta: 0.001
+    restore_best_weights: true
+
+  # 模型保存
+  save_best_only: true
+  save_freq: "epoch"
+
+  # 评估指标
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "auc"
+
+# 数据预处理配置
+preprocessing:
+  # 特征归一化
+  normalization:
+    method: "standard"  # "standard", "minmax", "robust"
+    feature_range: [0, 1]
+
+  # 特征选择
+  feature_selection:
+    enabled: false
+    method: "mutual_info"  # "mutual_info", "chi2", "f_classif"
+    k: 20  # 选择前k个特征
+
+  # 数据增强
+  augmentation:
+    enabled: false
+    noise_factor: 0.1
+    mixup_alpha: 0.2
+
+# 模型解释配置
+explainability:
+  enabled: true
+  methods:
+    - "shap"
+    - "lime"
+    - "permutation_importance"
+
+  # SHAP配置
+  shap:
+    max_evals: 1000
+    batch_size: 50
+
+# 实验跟踪
+experiment_tracking:
+  enabled: true
+  project_name: "roboguard4_payload_detection"
+  log_dir: "experiments"
+
+  # 记录的指标
+  track_metrics:
+    - "train_loss"
+    - "val_loss"
+    - "train_acc"
+    - "val_acc"
+    - "test_acc"
+    - "test_f1"
+    - "inference_time"

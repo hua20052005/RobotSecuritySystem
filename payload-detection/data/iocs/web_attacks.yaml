@@ -1,0 +1,50 @@
+# Web攻击规则
+rules:
+  - id: sql_injection
+    name: "SQL Injection"
+    pattern: "(?i)(select|union|insert|update|delete|drop|create|alter).*from.*where"
+    severity: high
+    category: web
+    description: "SQL注入攻击模式"
+
+  - id: xss_script
+    name: "Cross-Site Scripting (XSS)"
+    pattern: "(?i)<script[^>]*>.*</script>"
+    severity: high
+    category: web
+    description: "XSS脚本注入"
+
+  - id: xss_onload
+    name: "XSS Onload"
+    pattern: "(?i)onload\\s*="
+    severity: medium
+    category: web
+    description: "XSS事件注入"
+
+  - id: command_injection
+    name: "Command Injection"
+    pattern: "(?i)(;|\\|\\||&&|exec|system|eval|shell_exec)"
+    severity: critical
+    category: web
+    description: "命令注入"
+
+  - id: path_traversal
+    name: "Path Traversal"
+    pattern: "(?i)(\\.\\./|\\.\\.|%2e%2e/|%2e%2e%5c)"
+    severity: high
+    category: web
+    description: "路径遍历"
+
+  - id: file_inclusion
+    name: "File Inclusion"
+    pattern: "(?i)(include|require).*http://|ftp://"
+    severity: high
+    category: web
+    description: "远程文件包含"
+
+  - id: ldap_injection
+    name: "LDAP Injection"
+    pattern: "(?i)\\(\\*\\)|\\(&\\)|\\(\\|\\)|\\(!\\)"
+    severity: medium
+    category: web
+    description: "LDAP注入"

@@ -1,0 +1,57 @@
+# 协议异常规则
+rules:
+  - id: tcp_invalid_flags
+    name: "Invalid TCP Flags"
+    pattern: ".*"
+    severity: medium
+    category: protocol
+    description: "无效TCP标志组合"
+    condition: "tcp_flags in ['URG+PSH+FIN', 'SYN+FIN', 'SYN+RST']"
+
+  - id: http_invalid_method
+    name: "Invalid HTTP Method"
+    pattern: "(?i)^(get|post|put|delete|head|options|patch|trace|connect)"
+    severity: low
+    category: protocol
+    description: "无效HTTP方法"
+    condition: "not re.match(r'^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE|CONNECT)', method, re.I)"
+
+  - id: dns_long_query
+    name: "DNS Long Query"
+    pattern: ".*"
+    severity: medium
+    category: protocol
+    description: "DNS查询过长"
+    condition: "len(dns_query) > 253"
+
+  - id: tls_heartbeat_overflow
+    name: "TLS Heartbeat Overflow"
+    pattern: ".*"
+    severity: high
+    category: protocol
+    description: "TLS心跳溢出"
+    condition: "tls_type == 24 and tls_length > 16384"
+
+  - id: modbus_invalid_function
+    name: "Invalid Modbus Function"
+    pattern: ".*"
+    severity: medium
+    category: protocol
+    description: "无效Modbus功能码"
+    condition: "modbus_function not in [1,2,3,4,5,6,15,16]"
+
+  - id: mqtt_large_packet
+    name: "MQTT Large Packet"
+    pattern: ".*"
+    severity: low
+    category: protocol
+    description: "MQTT包过大"
+    condition: "len(payload) > 268435455"
+
+  - id: can_invalid_id
+    name: "Invalid CAN ID"
+    pattern: ".*"
+    severity: medium
+    category: protocol
+    description: "无效CAN ID"
+    condition: "can_id > 0x7FF and can_id < 0x80000000"

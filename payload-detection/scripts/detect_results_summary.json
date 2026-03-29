@@ -1,0 +1,25 @@
+{
+  "pcap_path": "D:\\学习\\信安赛\\Roboguard4\\test_mixed.pcap",
+  "output_csv": "detect_results.csv",
+  "processed_packets": 6761,
+  "total_packets_in_file": 6761,
+  "processing_time_sec": 180.2594,
+  "avg_packet_time_ms": 26.6616,
+  "avg_final_score": 0.207752,
+  "avg_confidence": 0.5505,
+  "non_safe_ratio": 1.0,
+  "high_or_critical_ratio": 0.0,
+  "max_score_packet": {
+    "packet_index": 0,
+    "final_score": 0.2077515935844839,
+    "threat_level": "LOW",
+    "protocol": "unknown"
+  },
+  "threat_level_distribution": {
+    "LOW": 6761
+  },
+  "protocol_distribution": {
+    "unknown": 6761
+  },
+  "top_rule_hits": []
+}

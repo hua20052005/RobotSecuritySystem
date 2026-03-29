@@ -1,0 +1,14 @@
+# 忽略 Python 自动生成的缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略环境配置和开发工具的隐藏文件夹
+.vscode/
+.idea/
+.env
+venv/
+
+# 忽略可能非常大的流量包文件（如果你确实需要团队共享那几个小测试包，这两行可以不加，或者写成 data/*.pcap 忽略特定文件夹）
+*.pcap
+*.pcapng

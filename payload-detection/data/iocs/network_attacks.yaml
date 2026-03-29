@@ -1,0 +1,54 @@
+# 网络攻击规则
+rules:
+  - id: c2_beacon
+    name: "C2 Beacon"
+    pattern: "(?i)(beacon|heartbeat|checkin)"
+    severity: high
+    category: network
+    description: "C2信标通信"
+
+  - id: dns_tunneling
+    name: "DNS Tunneling"
+    pattern: "(?i)[a-z0-9]{50,}\\."
+    severity: medium
+    category: network
+    description: "DNS隧道"
+
+  - id: icmp_tunnel
+    name: "ICMP Tunneling"
+    pattern: ".*"  # ICMP payload异常大
+    severity: medium
+    category: network
+    description: "ICMP隧道"
+    condition: "len(payload) > 100"
+
+  - id: port_scan
+    name: "Port Scan"
+    pattern: ".*"
+    severity: low
+    category: network
+    description: "端口扫描"
+    condition: "tcp_flags == 'S' and not tcp_ack"
+
+  - id: syn_flood
+    name: "SYN Flood"
+    pattern: ".*"
+    severity: medium
+    category: network
+    description: "SYN洪水攻击"
+    condition: "tcp_flags == 'S' and not tcp_ack"
+
+  - id: udp_flood
+    name: "UDP Flood"
+    pattern: ".*"
+    severity: medium
+    category: network
+    description: "UDP洪水攻击"
+    condition: "protocol == 'udp' and len(payload) > 1000"
+
+  - id: malware_signature
+    name: "Malware Signature"
+    pattern: "(?i)(trojan|virus|worm|backdoor)"
+    severity: critical
+    category: network
+    description: "恶意软件签名"

@@ -1,0 +1,17 @@
+# 基础规则配置（已迁移到data/iocs/目录）
+# 此文件保留向后兼容，新规则请添加到data/iocs/*.yaml
+
+rules:
+  - id: legacy_sql_injection
+    name: "Legacy SQL Injection"
+    pattern: "SELECT.*FROM"
+    severity: high
+    category: web
+    description: "传统SQL注入"
+
+  - id: legacy_c2_marker
+    name: "Legacy C2 Marker"
+    pattern: "cmd.exe"
+    severity: critical
+    category: network
+    description: "传统C2标记"
