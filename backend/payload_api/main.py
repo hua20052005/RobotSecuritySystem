@@ -93,15 +93,19 @@ async def detect_file(
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
     )
+
+    stderr_text = proc.stderr or ""
+    stdout_text = proc.stdout or ""
 
     if proc.returncode != 0:
         raise HTTPException(
             status_code=500,
             detail={
                 "message": "payload 检测失败",
-                "stderr": proc.stderr[-2000:],
-                "stdout": proc.stdout[-2000:],
+                "stderr": stderr_text[-2000:],
+                "stdout": stdout_text[-2000:],
             },
         )
 
@@ -123,7 +127,7 @@ async def detect_file(
         "preview": preview,
         "download_csv_url": f"/download/{run_id}/csv",
         "download_summary_url": f"/download/{run_id}/summary",
-        "stdout_tail": proc.stdout.splitlines()[-30:],
+        "stdout_tail": stdout_text.splitlines()[-30:],
     }
 
 

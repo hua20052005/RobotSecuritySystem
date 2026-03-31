@@ -44,10 +44,10 @@ def main():
     if not os.path.isfile(args.pcap_path):
         raise FileNotFoundError(f"PCAP文件不存在: {args.pcap_path}")
 
-    print(f"📁 读取PCAP: {args.pcap_path}")
+    print(f"[INFO] 读取PCAP: {args.pcap_path}")
     packets = rdpcap(args.pcap_path)
     total_packets = len(packets)
-    print(f"📦 读取到 {total_packets} 个包")
+    print(f"[INFO] 读取到 {total_packets} 个包")
 
     pipeline = PayloadDetectionPipeline(
         use_transformer=bool(args.transformer),
@@ -88,7 +88,7 @@ def main():
                 raw_bytes = bytes(pkt)
             except Exception as e:
                 if args.verbose:
-                    print(f"⚠️ 跳过包{i}，无法转换为字节: {e}")
+                    print(f"[WARN] 跳过包{i}，无法转换为字节: {e}")
                 continue
 
             begin = time.time()
@@ -144,7 +144,7 @@ def main():
 
         total_time = time.time() - start_total
 
-    print(f"✅ 检测完成: {count} / {total_packets} 个包，耗时 {total_time:.2f}s")
+    print(f"[OK] 检测完成: {count} / {total_packets} 个包，耗时 {total_time:.2f}s")
     print(f"结果已保存: {args.output}")
 
     # 输出文件级汇总

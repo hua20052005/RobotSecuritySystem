@@ -14,9 +14,25 @@
 
 ## 1. 项目结构（关键入口）
 
+### 1.0 当前推荐目录分层
+
+- `frontend/`：前端页面实现（Streamlit）
+	- `frontend/apps/main_detection.py`：主检测板块
+	- `frontend/apps/payload_detection.py`：Payload 检测板块
+	- `frontend/shared/ui_theme.py`：前端共享 UI 主题与组件
+- `backend/`：后端服务实现（FastAPI）
+	- `backend/payload_api/main.py`：Payload API
+- `core/`：跨层公用能力（特征工程、后端自启动等）
+- `payload-detection/`：Payload 模型、规则与脚本资产
+
+为兼容现有运行方式，以下入口文件仍保留：
+
+- `app.py`：兼容入口，转发到 `frontend/apps/main_detection.py`
+- `pages/2_payload_detection.py`：兼容入口，转发到 `frontend/apps/payload_detection.py`
+
 - `app.py`：Streamlit 主页面入口
 - `pages/2_payload_detection.py`：Streamlit 第二页（Payload 检测页）
-- `backends/payload_backend/main.py`：Payload 独立后端
+- `backend/payload_api/main.py`：Payload 独立后端
 - `requirements.txt`：根项目依赖
 - `payload-detection/requirements.txt`：Payload 子项目依赖
 - `payload-detection/scripts/detect_from_pcap.py`：Payload 检测脚本
@@ -62,25 +78,9 @@ pip install -r requirements.txt
 pip install -r .\payload-detection\requirements.txt
 ~~~
 
-### 3.4 启动 Payload 独立后端（终端 A）
+### 3.4 启动 Streamlit 前端（自动拉起 Payload 后端）
 
-新开一个 PowerShell 窗口，执行：
-
-~~~powershell
-cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
-.\venv\Scripts\Activate.ps1
-python -m uvicorn backends.payload_backend.main:app --host 127.0.0.1 --port 8010 --reload
-~~~
-
-可选健康检查（另一个终端执行）：
-
-~~~powershell
-Invoke-RestMethod http://127.0.0.1:8010/health
-~~~
-
-### 3.5 启动 Streamlit 前端（终端 B）
-
-再开一个 PowerShell 窗口，执行：
+执行：
 
 ~~~powershell
 cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
@@ -88,14 +88,28 @@ cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
 python -m streamlit run app.py
 ~~~
 
+说明：
+
+- Streamlit 启动时会自动检查 `http://127.0.0.1:8010/health`
+- 若后端未运行，会自动拉起 `backend.payload_api.main:app`
+- 无需再手动开第二个终端启动 uvicorn
+
 浏览器访问：
 
 - http://localhost:8501
 
-在左侧 Pages 导航切换页面：
+首页将展示顶端导航与两个功能入口：
 
-- 主检测页面
-- Payload-Detection 页面
+- 首页
+- 侧信道分析
+- 通信包载荷检测
+
+页面切换方式：
+
+- 顶部导航栏（首页 / 侧信道分析 / 通信包载荷检测）
+- 首页功能入口按钮
+
+说明：默认侧边页面导航已关闭，两个功能页仅保留侧边控制面板。
 
 ---
 
@@ -134,11 +148,11 @@ python -m streamlit run app.py
 
 按顺序检查：
 
-1. Payload 后端是否已启动（终端 A 必须一直运行）
+1. 启动后看侧边栏后端状态，确认是否显示“已在运行/已自动启动”
 2. 页面后端地址是否正确（默认 `http://127.0.0.1:8010`）
 3. 上传文件是否过大（首次检测会更慢）
 4. 是否在同一个虚拟环境安装了两份依赖
-5. 终端 A 是否有报错日志（优先看 uvicorn 输出）
+5. 若提示启动超时，检查 `uvicorn` 是否已安装、8010 端口是否被占用
 
 ### Q3: Streamlit 提示 `use_container_width` 将弃用
 
@@ -175,15 +189,7 @@ Payload 后端的中间文件与结果默认写入：
 
 ## 8. 最小可运行命令清单
 
-### 终端 A（后端）
-
-~~~powershell
-cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
-.\venv\Scripts\Activate.ps1
-python -m uvicorn backends.payload_backend.main:app --host 127.0.0.1 --port 8010 --reload
-~~~
-
-### 终端 B（前端）
+### 单终端启动（前端 + 自动后端）
 
 ~~~powershell
 cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
