@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from html import escape
 
 import streamlit as st
@@ -8,11 +7,6 @@ import streamlit as st
 from frontend.shared.ui_theme import apply_home_theme
 
 HOME_KICKER = "机器人威胁情报 · 检测与审计工作台"
-
-# 演示/汇报用全局概览（稳定可复现的展示数据）
-SERVICE_ANCHOR = date(2024, 9, 1)
-MOCK_TOTAL_AUDITS = 142_860
-MOCK_HIGH_RISK_BLOCKED = 11_204
 
 HERO_DECOR_SVG = """
 <svg viewBox="0 0 220 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -50,8 +44,6 @@ def main() -> None:
 
     apply_home_theme()
 
-    uptime_days = max(0, (date.today() - SERVICE_ANCHOR).days)
-
     st.markdown(
         (
             '<div class="hero-graphic-shell">'
@@ -79,20 +71,6 @@ def main() -> None:
             "</div>"
             "</section>"
             "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        (
-            '<section class="home-global-stats" aria-label="全局运行概览">'
-            f'<article class="home-global-stat"><span>平台连续运行</span>'
-            f"<strong>{uptime_days:,}</strong><em>天 · 稳定审计窗口</em></article>"
-            f'<article class="home-global-stat"><span>累计完成检测</span>'
-            f"<strong>{MOCK_TOTAL_AUDITS:,}</strong><em>次 · 侧信道与载荷联合</em></article>"
-            f'<article class="home-global-stat"><span>高危/可疑报文处置</span>'
-            f"<strong>{MOCK_HIGH_RISK_BLOCKED:,}</strong><em>条 · 需人工复核已标记</em></article>"
-            "</section>"
         ),
         unsafe_allow_html=True,
     )

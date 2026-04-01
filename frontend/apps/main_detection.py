@@ -27,16 +27,17 @@ from frontend.shared.ai_report import (
 from frontend.shared.ui_theme import apply_modern_theme, render_hero, render_metric_cards, render_top_nav, safe_columns
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-TARGET_IP = "10.4.0.3"
+TARGET_IP = "10.0.4.3"
 TEMP_PCAP_PATH = os.path.join(_ROOT, "data", "temp_upload.pcap")
 DEMO_PCAP_PATH = os.path.join(_ROOT, "data", "test.pcapng")
 SIDE_RESULT_STATE_KEY = "side_detection_state"
-_DEFAULT_DEMO_FEATURES = ["dst_ip_num", "port"]
+_DEFAULT_DEMO_FEATURES = ["size", "interval", "port"]
 
 _FEATURE_HELP: Dict[str, str] = {
     "dst_ip_num": "将目的 IP 映射为数值特征，观察通信目标在特征空间中的聚类与离群，辅助发现异常南向或未备案地址。",
     "port": "目的端口对应服务面；异常端口、高频跳变或非标服务常与扫描、隧道或恶意载荷投递相关。",
     "size": "报文长度序列可揭示批量外传、心跳抑制或碎片化规避；常与间隔、熵等特征联合用于侧信道建模。",
+    "interval": "同一源地址的相邻发包时间间隔。突发脉冲、周期失衡或抖动异常常可在该维度上体现。",
     "entropy": "载荷字节分布的信息熵。显著偏高可能对应加密/压缩流、勒索或 C2 隐蔽信道；过低多为明文指令或固定模板。",
     "src_ip_num": "源地址数值化特征，用于刻画发起端的时空聚集、伪造或分布式协同异常。",
 }
@@ -55,16 +56,18 @@ def _render_control_panel() -> Tuple[object, List[str], float, bool]:
     uploaded_file = st.file_uploader("上传流量包 (.pcap / .pcapng)", type=["pcap", "pcapng"])
     st.markdown('<div class="panel-group-label">分析维度</div>', unsafe_allow_html=True)
     feature_map = {
-        "目的IP编号": "dst_ip_num",
-        "目的端口": "port",
-        "报文长度": "size",
-        "载荷熵值": "entropy",
-        "源IP编号": "src_ip_num",
+        "目的IP编号": "dst_ip_num",   # 旧版排第 1
+        "目的端口": "port",         # 旧版排第 2
+        "报文长度": "size",         # 旧版排第 3
+        "载荷熵值": "entropy",      # 旧版排第 4
+        "源IP编号": "src_ip_num",    # 旧版排第 5
+        "发包间隔": "interval",     # 即使不勾选，也要放在最后以防干扰顺序
     }
+    default_feature_keys = {"size", "interval", "port"}
 
     selected_features: List[str] = []
-    for idx, (label, key) in enumerate(feature_map.items()):
-        default_value = idx < 2
+    for label, key in feature_map.items():
+        default_value = key in default_feature_keys
         tip = _FEATURE_HELP.get(key, "")
         if st.checkbox(label, value=default_value, help=tip):
             selected_features.append(key)
@@ -89,7 +92,7 @@ def _run_detection_with_feedback(pcap_path: str, features: List[str], contaminat
 
     status.markdown("**②** 按所选维度构建特征矩阵，准备离群检测空间 …")
     bar.progress(54)
-    model = IsolationForest(n_estimators=120, contamination=contamination, random_state=42)
+    model = IsolationForest(contamination=contamination, random_state=42)
     feature_frame = df[features]
 
     status.markdown("**③** 运行 IsolationForest：拟合正常边界并计算离群得分 …")
