@@ -11,6 +11,10 @@ import streamlit as st
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
+from frontend.shared.chart_theme import ACCENT, PRIMARY, PRIMARY_DARK, apply_mpl_rc
+
+apply_mpl_rc()
+
 from core.payload_backend_bootstrap import DEFAULT_BACKEND_URL, ensure_payload_backend
 from frontend.shared.ai_report import (
     build_report_html,
@@ -110,7 +114,7 @@ def _render_distribution_charts(summary: Dict[str, object]) -> None:
             threat_df = pd.DataFrame({"level": list(threat_dist.keys()), "count": list(threat_dist.values())})
             threat_df.sort_values("count", ascending=False, inplace=True)
             fig, ax = plt.subplots(figsize=(6.8, 4.2))
-            ax.bar(threat_df["level"], threat_df["count"], color="#0f766e")
+            ax.bar(threat_df["level"], threat_df["count"], color=PRIMARY)
             ax.set_xlabel("threat level")
             ax.set_ylabel("count")
             ax.grid(axis="y", alpha=0.18)
@@ -125,7 +129,7 @@ def _render_distribution_charts(summary: Dict[str, object]) -> None:
             protocol_df.sort_values("count", ascending=False, inplace=True)
             top_df = protocol_df.head(8)
             fig2, ax2 = plt.subplots(figsize=(6.8, 4.2))
-            ax2.barh(top_df["protocol"], top_df["count"], color="#0e7490")
+            ax2.barh(top_df["protocol"], top_df["count"], color=ACCENT)
             ax2.invert_yaxis()
             ax2.set_xlabel("count")
             ax2.grid(axis="x", alpha=0.18)
@@ -151,8 +155,8 @@ def _render_preview(preview: list[dict]) -> None:
         with cols[0]:
             if has_score:
                 fig, ax = plt.subplots(figsize=(6.5, 3.9))
-                ax.plot(df_preview.index, df_preview["final_score"], color="#0f766e", linewidth=1.2)
-                ax.fill_between(df_preview.index, df_preview["final_score"], alpha=0.16, color="#0f766e")
+                ax.plot(df_preview.index, df_preview["final_score"], color=PRIMARY, linewidth=1.2)
+                ax.fill_between(df_preview.index, df_preview["final_score"], alpha=0.16, color=PRIMARY)
                 ax.set_title("final_score 走势")
                 ax.set_xlabel("packet order")
                 ax.set_ylabel("score")
@@ -165,7 +169,7 @@ def _render_preview(preview: list[dict]) -> None:
             if has_level:
                 level_series = df_preview["threat_level"].astype(str).value_counts().sort_values(ascending=False)
                 fig2, ax2 = plt.subplots(figsize=(6.5, 3.9))
-                ax2.bar(level_series.index, level_series.values, color="#334155")
+                ax2.bar(level_series.index, level_series.values, color=PRIMARY_DARK)
                 ax2.set_title("threat_level 统计")
                 ax2.set_xlabel("level")
                 ax2.set_ylabel("count")

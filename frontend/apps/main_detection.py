@@ -12,6 +12,10 @@ from sklearn.ensemble import IsolationForest
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
+from frontend.shared.chart_theme import ALERT, PRIMARY, apply_mpl_rc
+
+apply_mpl_rc()
+
 from core.feature_eng import pcap_to_dataframe
 from frontend.shared.ai_report import (
     build_report_html,
@@ -22,9 +26,24 @@ from frontend.shared.ai_report import (
 )
 from frontend.shared.ui_theme import apply_modern_theme, render_hero, render_metric_cards, render_top_nav, safe_columns
 
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TARGET_IP = "10.4.0.3"
-TEMP_PCAP_PATH = os.path.join("data", "temp_upload.pcap")
+TEMP_PCAP_PATH = os.path.join(_ROOT, "data", "temp_upload.pcap")
+DEMO_PCAP_PATH = os.path.join(_ROOT, "data", "test.pcapng")
 SIDE_RESULT_STATE_KEY = "side_detection_state"
+_DEFAULT_DEMO_FEATURES = ["dst_ip_num", "port"]
+
+_FEATURE_HELP: Dict[str, str] = {
+    "dst_ip_num": "将目的 IP 映射为数值特征，观察通信目标在特征空间中的聚类与离群，辅助发现异常南向或未备案地址。",
+    "port": "目的端口对应服务面；异常端口、高频跳变或非标服务常与扫描、隧道或恶意载荷投递相关。",
+    "size": "报文长度序列可揭示批量外传、心跳抑制或碎片化规避；常与间隔、熵等特征联合用于侧信道建模。",
+    "entropy": "载荷字节分布的信息熵。显著偏高可能对应加密/压缩流、勒索或 C2 隐蔽信道；过低多为明文指令或固定模板。",
+    "src_ip_num": "源地址数值化特征，用于刻画发起端的时空聚集、伪造或分布式协同异常。",
+}
+
+_SLIDER_HELP = (
+    "IsolationForest 的污染率先验（预期异常占比）。调高会更宽松地标记离群点，适合攻击稀疏或噪声较大的现场；调低则更保守。"
+)
 
 
 def _render_control_panel() -> Tuple[object, List[str], float, bool]:
@@ -33,7 +52,7 @@ def _render_control_panel() -> Tuple[object, List[str], float, bool]:
     st.markdown('<p class="control-panel-hint">上传流量文件并配置审计参数，建议先使用默认选项快速完成首轮分析。</p>', unsafe_allow_html=True)
 
     st.markdown('<div class="panel-group-label">文件输入</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("上传流量包 (.pcap)", type=["pcap"])
+    uploaded_file = st.file_uploader("上传流量包 (.pcap / .pcapng)", type=["pcap", "pcapng"])
     st.markdown('<div class="panel-group-label">分析维度</div>', unsafe_allow_html=True)
     feature_map = {
         "目的IP编号": "dst_ip_num",
@@ -46,26 +65,68 @@ def _render_control_panel() -> Tuple[object, List[str], float, bool]:
     selected_features: List[str] = []
     for idx, (label, key) in enumerate(feature_map.items()):
         default_value = idx < 2
-        if st.checkbox(label, value=default_value):
+        tip = _FEATURE_HELP.get(key, "")
+        if st.checkbox(label, value=default_value, help=tip):
             selected_features.append(key)
 
     st.markdown('<div class="panel-group-label">风险阈值</div>', unsafe_allow_html=True)
-    contamination = st.slider("异常比例阈值", 0.01, 0.20, 0.06)
+    contamination = st.slider("异常比例阈值", 0.01, 0.20, 0.06, help=_SLIDER_HELP)
     run_button = st.button("启动侧信道审计", type="primary", width="stretch")
-    st.markdown('</section>', unsafe_allow_html=True)
+    st.markdown("</section>", unsafe_allow_html=True)
     return uploaded_file, selected_features, contamination, run_button
 
 
-def _run_detection(pcap_path: str, features: List[str], contamination: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def _run_detection_with_feedback(pcap_path: str, features: List[str], contamination: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    bar = st.progress(0)
+    status = st.empty()
+    status.markdown("**①** 正在解析 PCAP 报文结构并建立五元组索引 …")
     df = pcap_to_dataframe(pcap_path)
+    bar.progress(38)
+    if not features:
+        bar.progress(100)
+        status.info("未选择任何分析维度，已跳过离群模型。")
+        return df, pd.DataFrame()
+
+    status.markdown("**②** 按所选维度构建特征矩阵，准备离群检测空间 …")
+    bar.progress(54)
     model = IsolationForest(n_estimators=120, contamination=contamination, random_state=42)
     feature_frame = df[features]
+
+    status.markdown("**③** 运行 IsolationForest：拟合正常边界并计算离群得分 …")
+    bar.progress(72)
+    df = df.copy()
     df["anomaly_label"] = model.fit_predict(feature_frame)
     df["anomaly_score"] = model.decision_function(feature_frame)
 
     anomalies = df[df["anomaly_label"] == -1].copy()
     anomalies.sort_values(by="anomaly_score", inplace=True)
+    bar.progress(100)
+    status.markdown("**④** 检测已完成。下方为指标总览、可视化与异常包清单。")
     return df, anomalies
+
+
+EMPTY_ILLUS_SVG = """
+<svg class="empty-illus" width="72" height="72" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="12" y="16" width="48" height="40" rx="6" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-dasharray="4 3"/>
+  <path d="M22 28h28M22 38h18M22 48h24" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="50" cy="22" r="8" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+  <path d="M47 22l2 2 4-5" stroke="#b45309" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+"""
+
+
+def _render_side_empty_state() -> None:
+    st.markdown(
+        (
+            '<div class="side-empty-state">'
+            f"{EMPTY_ILLUS_SVG}"
+            "<h2>尚未加载流量数据</h2>"
+            "<p>在左侧上传 PCAP / PCAPNG 并点击「启动侧信道审计」。"
+            "评审或演示若无抓包文件，可使用内置演示包一键预览完整图表与表格布局。</p>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _render_overview(df: pd.DataFrame, anomalies: pd.DataFrame) -> None:
@@ -100,9 +161,9 @@ def _render_visuals(df: pd.DataFrame, anomalies: pd.DataFrame, features: List[st
             df[x_axis],
             df[y_axis],
             c=df["anomaly_score"],
-            cmap="RdYlBu_r",
+            cmap="coolwarm",
             s=18,
-            alpha=0.72,
+            alpha=0.75,
             edgecolors="none",
         )
         cbar = plt.colorbar(scatter, ax=ax, pad=0.01)
@@ -115,8 +176,8 @@ def _render_visuals(df: pd.DataFrame, anomalies: pd.DataFrame, features: List[st
 
     with col2:
         fig2, ax2 = plt.subplots(figsize=(7, 5.6))
-        ax2.hist(df["anomaly_score"], bins=28, color="#0f766e", alpha=0.88)
-        ax2.axvline(df["anomaly_score"].quantile(0.05), color="#b91c1c", linestyle="--", linewidth=1.5)
+        ax2.hist(df["anomaly_score"], bins=28, color=PRIMARY, alpha=0.88)
+        ax2.axvline(df["anomaly_score"].quantile(0.05), color=ALERT, linestyle="--", linewidth=1.5)
         ax2.set_title("离群得分分布")
         ax2.set_xlabel("anomaly_score")
         ax2.set_ylabel("count")
@@ -372,16 +433,14 @@ def main() -> None:
 
         if run_button:
             if not uploaded_file:
-                st.warning("请先上传 PCAP 文件。")
+                st.warning("请先上传 PCAP / PCAPNG 文件，或点击下文「演示数据」按钮。")
             elif not features:
                 st.error("请至少选择一个分析维度。")
             else:
-                with open(TEMP_PCAP_PATH, "wb") as f:
+                dest = TEMP_PCAP_PATH
+                with open(dest, "wb") as f:
                     f.write(uploaded_file.getbuffer())
-
-                with st.spinner("正在解析流量并计算离群得分，请稍候..."):
-                    df, anomalies = _run_detection(TEMP_PCAP_PATH, features, contamination)
-
+                df, anomalies = _run_detection_with_feedback(dest, features, contamination)
                 st.session_state[SIDE_RESULT_STATE_KEY] = {
                     "df": df,
                     "anomalies": anomalies,
@@ -393,7 +452,27 @@ def main() -> None:
 
         detection_state = st.session_state.get(SIDE_RESULT_STATE_KEY)
         if not detection_state:
-            st.info("上传 PCAP 后点击“启动侧信道审计”，即可生成检测结果、图表分析与证据链输出。")
+            _render_side_empty_state()
+            demo_ok = os.path.isfile(DEMO_PCAP_PATH)
+            if st.button(
+                "使用演示 PCAP 预览完整分析布局",
+                key="side_demo_run",
+                width="stretch",
+                disabled=not demo_ok,
+                help="使用仓库内 data/test.pcapng，无需自备抓包文件。",
+            ):
+                df, anomalies = _run_detection_with_feedback(DEMO_PCAP_PATH, _DEFAULT_DEMO_FEATURES, 0.06)
+                st.session_state[SIDE_RESULT_STATE_KEY] = {
+                    "df": df,
+                    "anomalies": anomalies,
+                    "features": list(_DEFAULT_DEMO_FEATURES),
+                    "contamination": 0.06,
+                }
+                st.session_state.pop("side_ai_report", None)
+                st.session_state.pop("side_ai_evidence", None)
+                st.rerun()
+            if not demo_ok:
+                st.caption("演示文件缺失：请在项目 `data/` 目录放置 `test.pcapng`。")
             return
 
         df = detection_state["df"]
