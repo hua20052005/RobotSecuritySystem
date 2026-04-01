@@ -27,7 +27,6 @@ from frontend.shared.ai_report import (
 from frontend.shared.ui_theme import apply_modern_theme, render_hero, render_metric_cards, render_top_nav, safe_columns
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-TARGET_IP = "10.0.4.3"
 TEMP_PCAP_PATH = os.path.join(_ROOT, "data", "temp_upload.pcap")
 DEMO_PCAP_PATH = os.path.join(_ROOT, "data", "test.pcapng")
 SIDE_RESULT_STATE_KEY = "side_detection_state"
@@ -47,7 +46,7 @@ _SLIDER_HELP = (
 )
 
 
-def _render_control_panel() -> Tuple[object, List[str], float, bool]:
+def _render_control_panel() -> Tuple[object, List[str], float, bool, str | None]:
     st.markdown('<section class="control-panel-card">', unsafe_allow_html=True)
     st.markdown('<h3 class="control-panel-title">控制面板</h3>', unsafe_allow_html=True)
     st.markdown('<p class="control-panel-hint">上传流量文件并配置审计参数，建议先使用默认选项快速完成首轮分析。</p>', unsafe_allow_html=True)
@@ -74,9 +73,14 @@ def _render_control_panel() -> Tuple[object, List[str], float, bool]:
 
     st.markdown('<div class="panel-group-label">风险阈值</div>', unsafe_allow_html=True)
     contamination = st.slider("异常比例阈值", 0.01, 0.20, 0.06, help=_SLIDER_HELP)
+
+    st.markdown('<div class="panel-group-label">重点目标追踪（可选）</div>', unsafe_allow_html=True)
+    target_ip_input = st.text_input("目标目的 IP", value="", placeholder="例如 10.0.4.3；留空则不启用追踪")
+    target_ip = target_ip_input.strip() or None
+
     run_button = st.button("启动侧信道审计", type="primary", width="stretch")
     st.markdown("</section>", unsafe_allow_html=True)
-    return uploaded_file, selected_features, contamination, run_button
+    return uploaded_file, selected_features, contamination, run_button, target_ip
 
 
 def _run_detection_with_feedback(pcap_path: str, features: List[str], contamination: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -148,7 +152,7 @@ def _render_overview(df: pd.DataFrame, anomalies: pd.DataFrame) -> None:
     )
 
 
-def _render_visuals(df: pd.DataFrame, anomalies: pd.DataFrame, features: List[str]) -> None:
+def _render_visuals(df: pd.DataFrame, anomalies: pd.DataFrame, features: List[str], target_ip: str | None) -> None:
     st.subheader("多维可视分析")
     col1, col2 = st.columns([1.45, 1.0], gap="large")
 
@@ -187,14 +191,15 @@ def _render_visuals(df: pd.DataFrame, anomalies: pd.DataFrame, features: List[st
         ax2.grid(alpha=0.15)
         st.pyplot(fig2, width="stretch")
 
-    st.subheader(f"重点目标追踪: {TARGET_IP}")
-    target_hits = anomalies[anomalies.get("dst", "") == TARGET_IP] if "dst" in anomalies.columns else pd.DataFrame()
-    if not target_hits.empty:
-        st.success(f"成功捕获 {len(target_hits)} 个目标 IP 异常包。")
-        hit_cols = safe_columns(target_hits.columns, ["idx", "src", "dst", "port", "size", "entropy", "anomaly_score"])
-        st.dataframe(target_hits[hit_cols], width="stretch")
-    else:
-        st.info("当前异常结果中未发现目标 IP。")
+    if target_ip:
+        st.subheader(f"重点目标追踪: {target_ip}")
+        target_hits = anomalies[anomalies.get("dst", "") == target_ip] if "dst" in anomalies.columns else pd.DataFrame()
+        if not target_hits.empty:
+            st.success(f"成功捕获 {len(target_hits)} 个目标 IP 异常包。")
+            hit_cols = safe_columns(target_hits.columns, ["idx", "src", "dst", "port", "size", "entropy", "anomaly_score"])
+            st.dataframe(target_hits[hit_cols], width="stretch")
+        else:
+            st.info("当前异常结果中未发现目标 IP。")
 
 
 def _render_anomaly_table(anomalies: pd.DataFrame) -> None:
@@ -211,6 +216,7 @@ def _build_side_channel_evidence(
     anomalies: pd.DataFrame,
     features: List[str],
     contamination: float,
+    target_ip: str | None,
 ) -> Dict[str, Any]:
     total = len(df)
     abnormal = len(anomalies)
@@ -242,7 +248,7 @@ def _build_side_channel_evidence(
             "anomaly_packets": abnormal,
             "anomaly_ratio": round(ratio, 6),
             "mean_anomaly_score": round(float(df["anomaly_score"].mean()), 6) if total and "anomaly_score" in df.columns else 0.0,
-            "target_ip": TARGET_IP,
+            "target_ip": target_ip or "",
         },
         "top_anomalies": top_records,
         "timeline_tail": timeline_records,
@@ -360,7 +366,13 @@ def _render_side_ai_report_dialog(report_text: str, evidence: Dict[str, Any]) ->
             _render_dialog_body()
 
 
-def _render_ai_report_actions(df: pd.DataFrame, anomalies: pd.DataFrame, features: List[str], contamination: float) -> None:
+def _render_ai_report_actions(
+    df: pd.DataFrame,
+    anomalies: pd.DataFrame,
+    features: List[str],
+    contamination: float,
+    target_ip: str | None,
+) -> None:
     st.subheader("AI检测报告")
     st.caption("报告输入: AI研判结果 + 异常证据链 + 原始流量；输出: 异常时序图、指令详情、漏洞分析、危害预测。")
     st.caption("DeepSeek 配置已从项目根目录 .env 自动读取。")
@@ -388,7 +400,7 @@ def _render_ai_report_actions(df: pd.DataFrame, anomalies: pd.DataFrame, feature
 
     show_modal = False
     if trigger_generate:
-        evidence = _build_side_channel_evidence(df, anomalies, features, contamination)
+        evidence = _build_side_channel_evidence(df, anomalies, features, contamination, target_ip)
         with st.spinner("AI 正在基于证据链生成报告，请稍候..."):
             try:
                 report = generate_security_report(
@@ -426,7 +438,7 @@ def main() -> None:
     left_col, right_col = st.columns([1, 2.45], gap="large")
 
     with left_col:
-        uploaded_file, features, contamination, run_button = _render_control_panel()
+        uploaded_file, features, contamination, run_button, target_ip = _render_control_panel()
 
     with right_col:
         render_hero(
@@ -449,6 +461,7 @@ def main() -> None:
                     "anomalies": anomalies,
                     "features": features,
                     "contamination": contamination,
+                    "target_ip": target_ip,
                 }
                 st.session_state.pop("side_ai_report", None)
                 st.session_state.pop("side_ai_evidence", None)
@@ -470,6 +483,7 @@ def main() -> None:
                     "anomalies": anomalies,
                     "features": list(_DEFAULT_DEMO_FEATURES),
                     "contamination": 0.06,
+                    "target_ip": target_ip,
                 }
                 st.session_state.pop("side_ai_report", None)
                 st.session_state.pop("side_ai_evidence", None)
@@ -482,13 +496,14 @@ def main() -> None:
         anomalies = detection_state["anomalies"]
         features = detection_state["features"]
         contamination = float(detection_state["contamination"])
+        target_ip = detection_state.get("target_ip")
 
         _render_overview(df, anomalies)
 
         tab1, tab2 = st.tabs(["可视化分析", "审计明细"])
         with tab1:
-            _render_visuals(df, anomalies, features)
+            _render_visuals(df, anomalies, features, target_ip)
         with tab2:
             _render_anomaly_table(anomalies)
 
-        _render_ai_report_actions(df, anomalies, features, contamination)
+        _render_ai_report_actions(df, anomalies, features, contamination, target_ip)
