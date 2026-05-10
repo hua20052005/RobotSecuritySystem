@@ -8,9 +8,17 @@ import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+from backend.auth import optional_user
+from backend.ai_report import router as ai_report_router
+from backend.auth_api import router as auth_router
+from backend.db import create_task, init_db
+from backend.motion_api import router as motion_router
+from backend.side_channel_api import router as side_channel_router
+from backend.tasks_api import router as tasks_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PAYLOAD_ROOT = PROJECT_ROOT / "payload-detection"
@@ -29,6 +37,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(side_channel_router)
+app.include_router(auth_router)
+app.include_router(ai_report_router)
+app.include_router(motion_router)
+app.include_router(tasks_router)
+init_db()
 
 
 def _read_csv_preview(csv_path: Path, max_rows: int = 200) -> List[Dict[str, str]]:
@@ -55,6 +69,7 @@ async def detect_file(
     file: UploadFile = File(...),
     limit: Optional[int] = Form(None),
     verbose: bool = Form(False),
+    user: Optional[Dict[str, object]] = Depends(optional_user),
 ) -> Dict[str, object]:
     if not SCRIPT_PATH.exists():
         raise HTTPException(status_code=500, detail=f"检测脚本不存在: {SCRIPT_PATH}")
@@ -121,7 +136,7 @@ async def detect_file(
         "summary": output_summary,
     }
 
-    return {
+    result = {
         "run_id": run_id,
         "summary": summary,
         "preview": preview,
@@ -129,6 +144,17 @@ async def detect_file(
         "download_summary_url": f"/download/{run_id}/summary",
         "stdout_tail": stdout_text.splitlines()[-30:],
     }
+    create_task(
+        task_id=run_id,
+        module="payload",
+        title=f"载荷检测 - {file.filename or run_id}",
+        parameters={"filename": file.filename, "limit": limit, "verbose": verbose},
+        summary=summary if isinstance(summary, dict) else {"summary": summary},
+        result=result,
+        files={"csv": str(output_csv), "summary": str(output_summary)},
+        user_id=int(user["id"]) if user else None,
+    )
+    return result
 
 
 @app.get("/download/{run_id}/{kind}")

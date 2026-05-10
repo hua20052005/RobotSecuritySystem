@@ -1,0 +1,410 @@
+[
+  {
+    "status": "NORMAL",
+    "confidence": 0.05853010625737898,
+    "details": {
+      "pcap_file": "hello\\hello1.pcap",
+      "raw_packets": 143514,
+      "kept_packets": 31539,
+      "duration_s": 13.200000000000001,
+      "action_sequence": "BBBHBEHBBBFABBBABBABEAABBDBCEEEHEAFAHBBFAHBBAAABBBHABBAAABEBHABBABBDEBDBBBABBBEABFBDBBBFEHFEHFEFEEEHAHFEFFABBHFEEHEEBBFHA",
+      "sequence_length": 121,
+      "primary_action": "jump",
+      "matched_actions": [
+        "hello",
+        "jump"
+      ],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.487603305785124,
+          "anomaly_score": 0.512396694214876,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.49586776859504134,
+          "anomaly_score": 0.5041322314049587,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": true
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.36363636363636365,
+          "anomaly_score": 0.6363636363636364,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.3471074380165289,
+          "anomaly_score": 0.6528925619834711,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  },
+  {
+    "status": "NORMAL",
+    "confidence": 0.019456533565444523,
+    "details": {
+      "pcap_file": "hello\\hello2.pcap",
+      "raw_packets": 129329,
+      "kept_packets": 28545,
+      "duration_s": 12.100000000000001,
+      "action_sequence": "BBBEBBBEBAABAABABEADEHAEFEFFBBDBBHHFBEFBDBBFHBBFBBBFBEDHBBBHDBFEBHBBBAFAAAHHABFHHEEFAEFHEBFFEFAEFDAAEHBA",
+      "sequence_length": 104,
+      "primary_action": "hello",
+      "matched_actions": [
+        "hello"
+      ],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.47115384615384615,
+          "anomaly_score": 0.5288461538461539,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.4326923076923077,
+          "anomaly_score": 0.5673076923076923,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": false
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.375,
+          "anomaly_score": 0.625,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.3653846153846154,
+          "anomaly_score": 0.6346153846153846,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  },
+  {
+    "status": "NORMAL",
+    "confidence": 0.03163602074493166,
+    "details": {
+      "pcap_file": "hello\\hello3.pcap",
+      "raw_packets": 135547,
+      "kept_packets": 30759,
+      "duration_s": 12.8,
+      "action_sequence": "BBBEBBBAEHBBABBBCEHEEHEAFBDBHFABBHBBHFHFBHBBAHBEFAABBDBBHFBBBABFAHAEHBBAAABHEBHFEFEEFFEHHEFHFEBABEDBBHEFBHFHEDBBBABAFHAA",
+      "sequence_length": 120,
+      "primary_action": "hello",
+      "matched_actions": [
+        "hello"
+      ],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.4833333333333333,
+          "anomaly_score": 0.5166666666666667,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.43333333333333335,
+          "anomaly_score": 0.5666666666666667,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": false
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.3916666666666667,
+          "anomaly_score": 0.6083333333333333,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.3666666666666667,
+          "anomaly_score": 0.6333333333333333,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  },
+  {
+    "status": "ANOMALY",
+    "confidence": 0.0061527581329561265,
+    "details": {
+      "pcap_file": "hello\\hello4.pcap",
+      "raw_packets": 106410,
+      "kept_packets": 23064,
+      "duration_s": 9.600000000000001,
+      "action_sequence": "EBBBEHBBBEFHEFEHFHABHAHFAFBHFBBHEDBBBHAHFFEBBBFHBBABFBABFBHAAAFHAAADBEBHEHHFFEEFHFEFAHBD",
+      "sequence_length": 88,
+      "primary_action": "hello",
+      "matched_actions": [],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.4455445544554455,
+          "anomaly_score": 0.5544554455445545,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": false
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.3846153846153846,
+          "anomaly_score": 0.6153846153846154,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": false
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.34375,
+          "anomaly_score": 0.65625,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.38636363636363635,
+          "anomaly_score": 0.6136363636363636,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [
+        {
+          "label": "hello",
+          "best_similarity": 0.4455445544554455,
+          "anomaly_score": 0.5544554455445545,
+          "anomaly_threshold": 0.5483026874115984,
+          "reason": "RMB mismatch: similarity 0.446 < threshold 0.452"
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.3846153846153846,
+          "anomaly_score": 0.6153846153846154,
+          "anomaly_threshold": 0.5626623376623376,
+          "reason": "RMB mismatch: similarity 0.385 < threshold 0.437"
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.34375,
+          "anomaly_score": 0.65625,
+          "anomaly_threshold": 0.540990990990991,
+          "reason": "RMB mismatch: similarity 0.344 < threshold 0.459"
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.38636363636363635,
+          "anomaly_score": 0.6136363636363636,
+          "anomaly_threshold": 0.5333333333333333,
+          "reason": "RMB mismatch: similarity 0.386 < threshold 0.467"
+        }
+      ],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  },
+  {
+    "status": "NORMAL",
+    "confidence": 0.5285007072135786,
+    "details": {
+      "pcap_file": "hello\\hello5.pcap",
+      "raw_packets": 119725,
+      "kept_packets": 26338,
+      "duration_s": 11.100000000000001,
+      "action_sequence": "BBBHEBBBEBBBABADEEFFEAFEHHEBBABHHHAFEFAABAABBBFABFBBDBBEBABABABFBAFEFBBABABFEAHFFFEHFEDEEBHEBFHFFFEHC",
+      "sequence_length": 101,
+      "primary_action": "hello",
+      "matched_actions": [
+        "hello",
+        "jump"
+      ],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.9801980198019802,
+          "anomaly_score": 0.01980198019801982,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.48514851485148514,
+          "anomaly_score": 0.5148514851485149,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": true
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.3366336633663366,
+          "anomaly_score": 0.6633663366336634,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.37623762376237624,
+          "anomaly_score": 0.6237623762376238,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  },
+  {
+    "status": "NORMAL",
+    "confidence": 0.057393596502507416,
+    "details": {
+      "pcap_file": "hello\\hello6.pcap",
+      "raw_packets": 128835,
+      "kept_packets": 28714,
+      "duration_s": 11.9,
+      "action_sequence": "BBBHBBBEBBBFHEEFHFEEDEBHBBBABDBHABBFBADDBBBFAAEBBBEHDABABDBBEHFFBABBHAFBFBHFDEHEEEHFEBFHHFEFEEDHBBBFFEBFBFEBAF",
+      "sequence_length": 110,
+      "primary_action": "hello",
+      "matched_actions": [
+        "hello",
+        "jump"
+      ],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.509090909090909,
+          "anomaly_score": 0.49090909090909096,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.509090909090909,
+          "anomaly_score": 0.49090909090909096,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": true
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.40909090909090906,
+          "anomaly_score": 0.5909090909090909,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.38181818181818183,
+          "anomaly_score": 0.6181818181818182,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  },
+  {
+    "status": "NORMAL",
+    "confidence": 0.0006836397925507054,
+    "details": {
+      "pcap_file": "hello\\hello7.pcap",
+      "raw_packets": 139565,
+      "kept_packets": 30722,
+      "duration_s": 12.9,
+      "action_sequence": "BBBHBBEHBBBHBBBEBAABBADDEHBBBABBAAAEAHFEHHHFFHFBABBBHBFHFBFBBAHAFHAFBAABHBBHAHDBBBHBEBBAACBBBEHAHAFAEFBFFHAEDEEFHEACBBEEHBHBAB",
+      "sequence_length": 126,
+      "primary_action": "hello",
+      "matched_actions": [
+        "hello"
+      ],
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.45238095238095233,
+          "anomaly_score": 0.5476190476190477,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.40476190476190477,
+          "anomaly_score": 0.5952380952380952,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": false
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.31746031746031744,
+          "anomaly_score": 0.6825396825396826,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.3015873015873016,
+          "anomaly_score": 0.6984126984126984,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "rbm_anomalies": [],
+      "papb_anomalies": [],
+      "papb_enabled": false,
+      "papb_decision": "DISABLED"
+    }
+  }
+]

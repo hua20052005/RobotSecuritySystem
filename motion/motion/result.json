@@ -1,0 +1,49 @@
+[
+  {
+    "status": "NORMAL",
+    "confidence": 0.05853010625737898,
+    "details": {
+      "pcap_file": "hello\\hello1.pcap",
+      "raw_packets": 143514,
+      "kept_packets": 31539,
+      "duration_s": 13.200000000000001,
+      "action_sequence": "BBBHBEHBBBFABBBABBABEAABBDBCEEEHEAFAHBBFAHBBAAABBBHABBAAABEBHABBABBDEBDBBBABBBEABFBDBBBFEHFEHFEFEEEHAHFEFFABBHFEEHEEBBFHA",
+      "sequence_length": 121,
+      "matches": [
+        {
+          "label": "hello",
+          "best_similarity": 0.487603305785124,
+          "anomaly_score": 0.512396694214876,
+          "anomaly_threshold": 0.5483026874115984,
+          "similarity_threshold": 0.4516973125884016,
+          "passed": true
+        },
+        {
+          "label": "jump",
+          "best_similarity": 0.49586776859504134,
+          "anomaly_score": 0.5041322314049587,
+          "anomaly_threshold": 0.5626623376623376,
+          "similarity_threshold": 0.43733766233766236,
+          "passed": true
+        },
+        {
+          "label": "step",
+          "best_similarity": 0.36363636363636365,
+          "anomaly_score": 0.6363636363636364,
+          "anomaly_threshold": 0.540990990990991,
+          "similarity_threshold": 0.459009009009009,
+          "passed": false
+        },
+        {
+          "label": "walk",
+          "best_similarity": 0.3471074380165289,
+          "anomaly_score": 0.6528925619834711,
+          "anomaly_threshold": 0.5333333333333333,
+          "similarity_threshold": 0.4666666666666667,
+          "passed": false
+        }
+      ],
+      "anomalies": []
+    }
+  }
+]

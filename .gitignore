@@ -9,6 +9,23 @@ __pycache__/
 .env
 venv/
 
-# 忽略可能非常大的流量包文件（如果你确实需要团队共享那几个小测试包，这两行可以不加，或者写成 data/*.pcap 忽略特定文件夹）
-*.pcap
-*.pcapng
+# 忽略运动识别训练数据（PCAP 文件过大）
+motion/motion/hello/
+motion/motion/jump/
+motion/motion/step/
+motion/motion/walk/
+
+# 忽略运动识别模型输出（临时文件）
+motion/motion/outputs_motion_model*/
+motion/motion/scapy/
+
+# 忽略 data 目录下的大型 PCAP 文件（保留必要的测试数据可按需修改）
+data/*.pcap
+data/*.pcapng
+data/api_runs/*.pcapng
+
+# 忽略各检测模块的 API 运行输出数据（这些都是临时结果和大文件）
+motion/motion/api_runs/
+payload-detection/data/api_runs/
+core/api_runs/
+backend/api_runs/

@@ -1,0 +1,233 @@
+<script setup>
+import { computed, onMounted, provide, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+
+import api from './api/client'
+
+const route = useRoute()
+const router = useRouter()
+const isEntry = computed(() => route.name === 'home')
+const authVisible = ref(false)
+const authMode = ref('login')
+const authLoading = ref(false)
+const authError = ref('')
+const auth = reactive({ user: null })
+const authForm = reactive({
+  login: '',
+  username: '',
+  email: '',
+  password: '',
+  confirm_password: '',
+  remember: true,
+})
+
+provide('auth', auth)
+provide('openAuth', (mode = 'login') => {
+  authMode.value = mode
+  authError.value = ''
+  authVisible.value = true
+})
+
+const userInitial = computed(() => {
+  const name = auth.user?.display_name || auth.user?.username || 'U'
+  return name.slice(0, 1).toUpperCase()
+})
+
+const loadMe = async () => {
+  if (!localStorage.getItem('rss_token')) return
+  try {
+    const { data } = await api.get('/api/auth/me')
+    auth.user = data.user
+  } catch {
+    localStorage.removeItem('rss_token')
+    auth.user = null
+  }
+}
+
+const errorText = (error) => {
+  const detail = error.response?.data?.detail
+  if (Array.isArray(detail)) {
+    return detail.map((item) => {
+      const field = item.loc?.slice(-1)?.[0]
+      return field ? `${field}: ${item.msg}` : item.msg
+    }).join('；')
+  }
+  return detail || '操作失败，请检查输入'
+}
+
+const validateAuth = () => {
+  if (authMode.value === 'login') {
+    if (!authForm.login.trim()) return '请输入邮箱或用户名'
+    if (!authForm.password) return '请输入密码'
+    return ''
+  }
+  if (!authForm.username.trim()) return '请输入用户名'
+  if (!/^[\u4e00-\u9fa5A-Za-z0-9_-]{2,32}$/.test(authForm.username.trim())) return '用户名只能包含中文、字母、数字、下划线或短横线，长度 2-32 位'
+  if (!authForm.email.trim()) return '请输入邮箱'
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authForm.email.trim())) return '邮箱格式不正确'
+  if (authForm.password.length < 8) return '密码至少需要 8 位'
+  if (!/[A-Za-z]/.test(authForm.password) || !/\d/.test(authForm.password)) return '密码需要同时包含字母和数字'
+  if (authForm.password !== authForm.confirm_password) return '两次输入的密码不一致'
+  return ''
+}
+
+const submitAuth = async () => {
+  authError.value = ''
+  const validation = validateAuth()
+  if (validation) {
+    authError.value = validation
+    return
+  }
+  authLoading.value = true
+  try {
+    const endpoint = authMode.value === 'login' ? '/api/auth/login' : '/api/auth/register'
+    const payload = authMode.value === 'login'
+      ? { login: authForm.login, password: authForm.password, remember: authForm.remember }
+      : {
+          username: authForm.username,
+          email: authForm.email,
+          password: authForm.password,
+          confirm_password: authForm.confirm_password,
+        }
+    const { data } = await api.post(endpoint, payload)
+    localStorage.setItem('rss_token', data.token)
+    auth.user = data.user
+    authVisible.value = false
+    ElMessage.success(authMode.value === 'login' ? '登录成功' : '注册成功')
+  } catch (error) {
+    authError.value = errorText(error)
+  } finally {
+    authLoading.value = false
+  }
+}
+
+const logout = async () => {
+  try {
+    await api.post('/api/auth/logout')
+  } finally {
+    localStorage.removeItem('rss_token')
+    auth.user = null
+    if (route.meta.requiresAuth) router.push('/side-channel')
+  }
+}
+
+onMounted(loadMe)
+</script>
+
+<template>
+  <RouterView v-if="isEntry" />
+
+  <div v-else class="workbench-shell">
+    <aside class="sidebar">
+      <RouterLink class="sidebar-brand" to="/">
+        <span class="brand-mark">R</span>
+        <span>
+          <strong>Robot Security</strong>
+          <small>检测工作台</small>
+        </span>
+      </RouterLink>
+
+      <nav class="sidebar-nav">
+        <RouterLink to="/side-channel">侧信道分析</RouterLink>
+        <RouterLink to="/payload">载荷检测</RouterLink>
+        <RouterLink to="/motion">运动时序建模</RouterLink>
+        <RouterLink to="/history">历史记录</RouterLink>
+        <RouterLink to="/profile">个人主页</RouterLink>
+      </nav>
+
+      <div class="sidebar-status">
+        <span>API</span>
+        <strong>127.0.0.1:8010</strong>
+      </div>
+    </aside>
+
+    <main class="workbench-main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <strong>{{ route.meta.title || '检测工作台' }}</strong>
+          <span>Robot Security System</span>
+        </div>
+
+        <nav class="topbar-nav">
+          <RouterLink to="/history">历史记录</RouterLink>
+          <RouterLink to="/profile">个人主页</RouterLink>
+        </nav>
+
+        <el-dropdown v-if="auth.user" trigger="click">
+          <button class="account-button" type="button">
+            <span class="avatar">{{ userInitial }}</span>
+            <span>{{ auth.user.display_name || auth.user.username }}</span>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="router.push('/profile')">个人主页</el-dropdown-item>
+              <el-dropdown-item @click="router.push('/history')">历史记录</el-dropdown-item>
+              <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+
+        <div v-else class="topbar-auth">
+          <button type="button" class="text-login" @click="authMode = 'login'; authVisible = true">登录</button>
+          <el-button type="primary" @click="authMode = 'register'; authVisible = true">注册</el-button>
+        </div>
+      </header>
+
+      <RouterView />
+    </main>
+  </div>
+
+  <el-dialog v-model="authVisible" width="420px" class="auth-dialog" :show-close="false">
+    <div class="auth-head">
+      <div>
+        <h2>{{ authMode === 'login' ? '登录' : '注册' }}</h2>
+        <p>{{ authMode === 'login' ? '进入你的检测工作台' : '创建本地分析账号' }}</p>
+      </div>
+      <button type="button" @click="authVisible = false">×</button>
+    </div>
+
+    <div class="auth-tabs">
+      <button :class="{ active: authMode === 'login' }" type="button" @click="authMode = 'login'">登录</button>
+      <button :class="{ active: authMode === 'register' }" type="button" @click="authMode = 'register'">注册</button>
+    </div>
+
+    <div v-if="authMode === 'login'" class="auth-form">
+      <label class="auth-field">
+        <span>账号</span>
+        <el-input v-model="authForm.login" placeholder="邮箱或用户名" />
+      </label>
+      <label class="auth-field">
+        <span>密码</span>
+        <el-input v-model="authForm.password" placeholder="请输入密码" type="password" show-password />
+      </label>
+      <div class="auth-options">
+        <el-checkbox v-model="authForm.remember">记住我</el-checkbox>
+        <button type="button">忘记密码？</button>
+      </div>
+      <p v-if="authError" class="auth-error">{{ authError }}</p>
+      <el-button type="primary" :loading="authLoading" class="full-button" @click="submitAuth">登录</el-button>
+    </div>
+
+    <div v-else class="auth-form">
+      <label class="auth-field">
+        <span>用户名</span>
+        <el-input v-model="authForm.username" placeholder="支持中文、字母、数字" />
+      </label>
+      <label class="auth-field">
+        <span>邮箱</span>
+        <el-input v-model="authForm.email" placeholder="name@example.com" />
+      </label>
+      <label class="auth-field">
+        <span>密码</span>
+        <el-input v-model="authForm.password" placeholder="至少 8 位，含字母和数字" type="password" show-password />
+      </label>
+      <label class="auth-field">
+        <span>确认密码</span>
+        <el-input v-model="authForm.confirm_password" placeholder="再次输入密码" type="password" show-password />
+      </label>
+      <p v-if="authError" class="auth-error">{{ authError }}</p>
+      <el-button type="primary" :loading="authLoading" class="full-button" @click="submitAuth">注册</el-button>
+    </div>
+  </el-dialog>
+</template>

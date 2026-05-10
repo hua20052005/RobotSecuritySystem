@@ -1,0 +1,7 @@
+{
+  "sequences": [
+    ["hello", "walk", "step"],
+    ["hello", "jump"],
+    ["walk", "step", "jump"]
+  ]
+}
