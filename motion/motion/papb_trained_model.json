@@ -1,0 +1,314 @@
+{
+  "normal_templates": [
+    [
+      "lie_down",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "walk_slow",
+      "walk_mid",
+      "walk_slow",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "walk_mid",
+      "run_fast",
+      "walk_mid",
+      "walk_slow",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "backward",
+      "stand"
+    ],
+    [
+      "stand",
+      "hello",
+      "twist_body",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "twist_body",
+      "dance2",
+      "moonwalk",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "forward_jump",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "side_jump",
+      "stand"
+    ],
+    [
+      "stand",
+      "twist_body",
+      "backflip",
+      "stand"
+    ],
+    [
+      "lie_down",
+      "stand",
+      "walk_slow",
+      "walk_mid",
+      "hello",
+      "twist_body",
+      "moonwalk",
+      "dance2",
+      "stand",
+      "lie_down"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "walk_slow",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "dance2",
+      "twist_body",
+      "moonwalk",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "forward_jump",
+      "twist_body",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "walk_mid",
+      "walk_slow",
+      "stand",
+      "lie_down"
+    ],
+    [
+      "stand",
+      "hello",
+      "moonwalk",
+      "dance2",
+      "twist_body",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "walk_mid",
+      "walk_slow",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "walk_slow",
+      "side_jump",
+      "forward_jump",
+      "stand"
+    ],
+    [
+      "lie_down",
+      "stand",
+      "walk_slow",
+      "walk_mid",
+      "run_fast",
+      "walk_mid",
+      "walk_slow",
+      "hello",
+      "twist_body",
+      "moonwalk",
+      "dance2",
+      "backflip",
+      "stand",
+      "lie_down"
+    ]
+  ],
+  "max_repeats": {
+    "lie_down": 1,
+    "stand": 1,
+    "walk_slow": 2,
+    "walk_mid": 1,
+    "run_fast": 1,
+    "backward": 1,
+    "hello": 1,
+    "twist_body": 1,
+    "moonwalk": 1,
+    "dance2": 1,
+    "forward_jump": 1,
+    "side_jump": 1,
+    "backflip": 1
+  },
+  "critical_actions": [
+    "stand"
+  ],
+  "noncritical_actions": [],
+  "embedding_centers": {},
+  "embedding_thresholds": {},
+  "embedding_weight": 0.35,
+  "max_edit_distance": 1,
+  "max_error_ratio": 0.0,
+  "end_action": "__END__",
+  "require_terminal": true,
+  "transition_matrix": {
+    "lie_down": {
+      "stand": 0.92,
+      "lie_down": 0.08
+    },
+    "stand": {
+      "lie_down": 0.1,
+      "walk_slow": 0.28,
+      "walk_mid": 0.12,
+      "backward": 0.06,
+      "side_jump": 0.05,
+      "forward_jump": 0.06,
+      "backflip": 0.03,
+      "moonwalk": 0.08,
+      "dance2": 0.07,
+      "hello": 0.1,
+      "twist_body": 0.05
+    },
+    "walk_slow": {
+      "stand": 0.2,
+      "walk_slow": 0.18,
+      "walk_mid": 0.35,
+      "run_fast": 0.08,
+      "backward": 0.06,
+      "side_jump": 0.03,
+      "forward_jump": 0.05,
+      "hello": 0.03,
+      "twist_body": 0.02
+    },
+    "walk_mid": {
+      "stand": 0.1,
+      "walk_slow": 0.25,
+      "walk_mid": 0.2,
+      "run_fast": 0.25,
+      "backward": 0.04,
+      "side_jump": 0.03,
+      "forward_jump": 0.05,
+      "hello": 0.04,
+      "twist_body": 0.04
+    },
+    "run_fast": {
+      "walk_mid": 0.45,
+      "walk_slow": 0.3,
+      "stand": 0.1,
+      "side_jump": 0.03,
+      "forward_jump": 0.05,
+      "backward": 0.02,
+      "twist_body": 0.05
+    },
+    "backward": {
+      "stand": 0.3,
+      "walk_slow": 0.35,
+      "backward": 0.15,
+      "walk_mid": 0.08,
+      "hello": 0.05,
+      "twist_body": 0.07
+    },
+    "side_jump": {
+      "stand": 0.42,
+      "walk_slow": 0.2,
+      "walk_mid": 0.1,
+      "side_jump": 0.05,
+      "forward_jump": 0.08,
+      "twist_body": 0.15
+    },
+    "forward_jump": {
+      "stand": 0.55,
+      "walk_slow": 0.18,
+      "walk_mid": 0.07,
+      "forward_jump": 0.03,
+      "twist_body": 0.17
+    },
+    "backflip": {
+      "stand": 0.72,
+      "twist_body": 0.2,
+      "backflip": 0.01,
+      "walk_slow": 0.04,
+      "walk_mid": 0.03
+    },
+    "moonwalk": {
+      "stand": 0.2,
+      "moonwalk": 0.2,
+      "dance2": 0.25,
+      "twist_body": 0.2,
+      "hello": 0.1,
+      "walk_slow": 0.05
+    },
+    "dance2": {
+      "stand": 0.22,
+      "moonwalk": 0.25,
+      "dance2": 0.18,
+      "twist_body": 0.2,
+      "hello": 0.1,
+      "walk_slow": 0.05
+    },
+    "hello": {
+      "stand": 0.35,
+      "hello": 0.18,
+      "twist_body": 0.22,
+      "moonwalk": 0.08,
+      "dance2": 0.07,
+      "walk_slow": 0.1
+    },
+    "twist_body": {
+      "stand": 0.22,
+      "moonwalk": 0.2,
+      "dance2": 0.2,
+      "hello": 0.15,
+      "backflip": 0.08,
+      "walk_slow": 0.05,
+      "walk_mid": 0.05,
+      "side_jump": 0.03,
+      "forward_jump": 0.02
+    }
+  },
+  "forbidden_transitions": [
+    {
+      "from": "run_fast",
+      "to": "lie_down",
+      "rule": "run_fast_cannot_directly_lie_down",
+      "score": 0.99
+    },
+    {
+      "from": "lie_down",
+      "to": "backflip",
+      "rule": "lie_down_cannot_directly_backflip",
+      "score": 0.98
+    },
+    {
+      "from": "forward_jump",
+      "to": "run_fast",
+      "rule": "forward_jump_should_recover_before_running",
+      "score": 0.95
+    },
+    {
+      "from": "backflip",
+      "to": "backflip",
+      "rule": "continuous_backflip_is_abnormal",
+      "score": 0.97
+    }
+  ],
+  "transition_risk_threshold": 0.15
+}

@@ -17,6 +17,7 @@ from backend.ai_report import router as ai_report_router
 from backend.auth_api import router as auth_router
 from backend.db import create_task, init_db
 from backend.motion_api import router as motion_router
+from backend.papb_api import router as papb_router
 from backend.side_channel_api import router as side_channel_router
 from backend.tasks_api import router as tasks_router
 
@@ -41,6 +42,7 @@ app.include_router(side_channel_router)
 app.include_router(auth_router)
 app.include_router(ai_report_router)
 app.include_router(motion_router)
+app.include_router(papb_router)
 app.include_router(tasks_router)
 init_db()
 

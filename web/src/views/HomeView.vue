@@ -7,51 +7,70 @@ const openAuth = inject('openAuth')
 
 const modules = [
   {
-    title: '侧信道分析',
-    text: '基于报文长度、间隔、端口和熵值识别异常通信行为。',
+    title: '侧信道流量分析',
+    text: '读取 PCAP，提取包长、间隔、端口、熵和 IP 画像，定位异常通信行为。',
     path: '/side-channel',
   },
   {
-    title: '载荷检测',
-    text: '对通信包载荷执行逐包评分，输出 CSV 与 JSON 证据。',
+    title: '通信载荷检测',
+    text: '运行载荷检测流水线，输出威胁等级、协议分布和可导出的检测明细。',
     path: '/payload',
   },
   {
     title: '运动时序建模',
-    text: '把动作流量转为符号序列，分析模板偏移与任务转移异常。',
+    text: '按窗口聚合机器人控制流量，检查动作模板、相似度和时序一致性。',
     path: '/motion',
   },
+  {
+    title: 'PAPB 流程校验',
+    text: '校验任务动作序列，识别缺失、插入、顺序错误和未知流程。',
+    path: '/papb',
+  },
+]
+
+const workflow = [
+  '导入流量或动作序列',
+  '提取行为特征',
+  '对照模型和规则',
+  '保存审计证据',
 ]
 </script>
 
 <template>
   <main class="entry-page">
-    <section class="entry-panel">
+    <section class="entry-panel entry-panel-wide">
       <div class="entry-copy">
         <p class="entry-kicker">Robot Security System</p>
-        <h1>机器人网络安全检测工作台</h1>
+        <h1>机器人控制流量审计台</h1>
         <p>
-          面向比赛演示和取证复核的三模块系统。进入后通过左侧栏切换检测能力，
-          每个模块独立运行并保留可下载证据。
+          面向比赛演示和本地复核的安全分析工具。它把侧信道、载荷、运动时序和 PAPB
+          流程校验放在同一个工作台里，方便从一份流量证据追到具体异常。
         </p>
         <div class="entry-actions">
           <el-button type="primary" size="large" @click="router.push('/side-channel')">
-            进入工作台
+            开始分析
           </el-button>
+          <el-button size="large" @click="router.push('/history')">查看历史</el-button>
           <el-button size="large" @click="openAuth?.('login')">登录</el-button>
-          <el-button size="large" @click="openAuth?.('register')">注册</el-button>
+        </div>
+
+        <div class="entry-workflow">
+          <div v-for="(step, index) in workflow" :key="step" class="workflow-step">
+            <span>{{ index + 1 }}</span>
+            <strong>{{ step }}</strong>
+          </div>
         </div>
       </div>
 
       <div class="entry-modules">
         <button
-          v-for="item in modules"
+          v-for="(item, index) in modules"
           :key="item.path"
           class="entry-module"
           type="button"
           @click="router.push(item.path)"
         >
-          <span class="entry-module-index">0{{ modules.indexOf(item) + 1 }}</span>
+          <span class="entry-module-index">0{{ index + 1 }}</span>
           <strong>{{ item.title }}</strong>
           <span>{{ item.text }}</span>
         </button>

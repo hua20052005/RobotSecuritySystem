@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import echarts from '../lib/echarts'
 import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
@@ -217,7 +217,6 @@ watch(result, async () => {
         <h2 class="section-title">载荷检测</h2>
         <p class="panel-sub">逐包风险评分并输出结构化证据。</p>
       </div>
-      <div class="pill-badge">FastAPI 后端</div>
     </div>
 
     <div class="grid-2" style="margin-top: 20px;">

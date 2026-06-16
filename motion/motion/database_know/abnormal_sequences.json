@@ -1,0 +1,50 @@
+[
+  {
+    "type": "illegal_transition",
+    "risk": "high",
+    "sequence": [4, 0],
+    "reason": "高速运动后瞬间趴下，不符合运动稳定性"
+  },
+  {
+    "type": "continuous_backflip",
+    "risk": "critical",
+    "sequence": [8, 8, 8],
+    "reason": "连续后空翻不符合真实功耗与姿态恢复规律"
+  },
+  {
+    "type": "jump_to_run",
+    "risk": "high",
+    "sequence": [7, 4],
+    "reason": "跳跃落地后直接高速奔跑不合理"
+  },
+  {
+    "type": "semantic_hijack",
+    "risk": "high",
+    "sequence": [2, 3, 10, 4],
+    "reason": "巡逻过程中突然进入舞蹈动作"
+  },
+  {
+    "type": "instant_backflip",
+    "risk": "high",
+    "sequence": [0, 8],
+    "reason": "趴下状态无法直接后空翻"
+  },
+  {
+    "type": "abnormal_performance",
+    "risk": "medium",
+    "sequence": [4, 9, 4],
+    "reason": "高速运动中插入太空步"
+  },
+  {
+    "type": "repeated_jump",
+    "risk": "medium",
+    "sequence": [7, 7, 7, 7],
+    "reason": "持续跳跃不符合稳定控制"
+  },
+  {
+    "type": "reverse_flip",
+    "risk": "critical",
+    "sequence": [5, 8],
+    "reason": "后退过程中直接后空翻"
+  }
+]

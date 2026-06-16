@@ -1,14 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
 
 const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
-const passwordOpen = ref(false)
 const emailNotice = ref(true)
 const profile = ref({
   username: '',
@@ -59,18 +58,6 @@ const saveProfile = async () => {
     ElMessage.error('保存失败。')
   } finally {
     saving.value = false
-  }
-}
-
-const confirmDelete = async () => {
-  try {
-    await ElMessageBox.confirm('注销账号会清除当前账号会话。此处仅做二次确认占位，暂不删除历史数据。', '确认操作', {
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-  } catch {
-    return
   }
 }
 
@@ -145,17 +132,10 @@ onMounted(loadProfile)
     <section class="panel">
       <h2 class="section-title">账户设置</h2>
       <div class="settings-list refined">
-        <button type="button" @click="passwordOpen = !passwordOpen">修改密码</button>
-        <div v-if="passwordOpen" class="inline-form">
-          <el-input placeholder="当前密码" type="password" show-password />
-          <el-input placeholder="新密码" type="password" show-password />
-          <el-button>保存</el-button>
-        </div>
         <div class="setting-row">
           <span>告警邮件通知</span>
           <el-switch v-model="emailNotice" />
         </div>
-        <el-button type="danger" plain @click="confirmDelete">注销账号</el-button>
       </div>
     </section>
   </section>

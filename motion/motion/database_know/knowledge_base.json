@@ -1,0 +1,339 @@
+{
+  "version": "Lite3-AMNAR-KnowledgeBase-v1",
+  "description": "云深处Lite3机器狗动作时序一致性学习知识库",
+  "actions": {
+    "0": "lie_down",
+    "1": "stand",
+    "2": "walk_slow",
+    "3": "walk_mid",
+    "4": "run_fast",
+    "5": "backward",
+    "6": "side_jump",
+    "7": "forward_jump",
+    "8": "backflip",
+    "9": "moonwalk",
+    "10": "dance2",
+    "11": "hello",
+    "12": "twist_body"
+  },
+
+  "normal_transition_probability": {
+
+    "0": {
+      "1": 0.92,
+      "0": 0.08
+    },
+
+    "1": {
+      "0": 0.10,
+      "2": 0.28,
+      "3": 0.12,
+      "5": 0.06,
+      "6": 0.05,
+      "7": 0.06,
+      "8": 0.03,
+      "9": 0.08,
+      "10": 0.07,
+      "11": 0.10,
+      "12": 0.05
+    },
+
+    "2": {
+      "1": 0.20,
+      "2": 0.18,
+      "3": 0.35,
+      "4": 0.08,
+      "5": 0.06,
+      "6": 0.03,
+      "7": 0.05,
+      "11": 0.03,
+      "12": 0.02
+    },
+
+    "3": {
+      "1": 0.10,
+      "2": 0.25,
+      "3": 0.20,
+      "4": 0.25,
+      "5": 0.04,
+      "6": 0.03,
+      "7": 0.05,
+      "11": 0.04,
+      "12": 0.04
+    },
+
+    "4": {
+      "3": 0.45,
+      "2": 0.30,
+      "1": 0.10,
+      "6": 0.03,
+      "7": 0.05,
+      "5": 0.02,
+      "12": 0.05
+    },
+
+    "5": {
+      "1": 0.30,
+      "2": 0.35,
+      "5": 0.15,
+      "3": 0.08,
+      "11": 0.05,
+      "12": 0.07
+    },
+
+    "6": {
+      "1": 0.42,
+      "2": 0.20,
+      "3": 0.10,
+      "6": 0.05,
+      "7": 0.08,
+      "12": 0.15
+    },
+
+    "7": {
+      "1": 0.55,
+      "2": 0.18,
+      "3": 0.07,
+      "7": 0.03,
+      "12": 0.17
+    },
+
+    "8": {
+      "1": 0.72,
+      "12": 0.20,
+      "8": 0.01,
+      "2": 0.04,
+      "3": 0.03
+    },
+
+    "9": {
+      "1": 0.20,
+      "9": 0.20,
+      "10": 0.25,
+      "12": 0.20,
+      "11": 0.10,
+      "2": 0.05
+    },
+
+    "10": {
+      "1": 0.22,
+      "9": 0.25,
+      "10": 0.18,
+      "12": 0.20,
+      "11": 0.10,
+      "2": 0.05
+    },
+
+    "11": {
+      "1": 0.35,
+      "11": 0.18,
+      "12": 0.22,
+      "9": 0.08,
+      "10": 0.07,
+      "2": 0.10
+    },
+
+    "12": {
+      "1": 0.22,
+      "9": 0.20,
+      "10": 0.20,
+      "11": 0.15,
+      "8": 0.08,
+      "2": 0.05,
+      "3": 0.05,
+      "6": 0.03,
+      "7": 0.02
+    }
+  },
+
+  "normal_sequences": [
+
+    {
+      "scene": "startup",
+      "sequence": [0,1]
+    },
+
+    {
+      "scene": "basic_patrol",
+      "sequence": [1,2,2,3,2,1]
+    },
+
+    {
+      "scene": "high_speed_patrol",
+      "sequence": [1,2,3,4,3,2,1]
+    },
+
+    {
+      "scene": "backward_adjustment",
+      "sequence": [1,2,5,1]
+    },
+
+    {
+      "scene": "interactive_demo",
+      "sequence": [1,11,12,11,1]
+    },
+
+    {
+      "scene": "dance_show",
+      "sequence": [1,9,12,10,9,1]
+    },
+
+    {
+      "scene": "jump_training",
+      "sequence": [1,2,7,1]
+    },
+
+    {
+      "scene": "side_jump_show",
+      "sequence": [1,2,6,1]
+    },
+
+    {
+      "scene": "extreme_show",
+      "sequence": [1,12,8,1]
+    },
+
+    {
+      "scene": "mixed_showcase",
+      "sequence": [0,1,2,3,11,12,9,10,1,0]
+    },
+
+    {
+      "scene": "walk_and_greet",
+      "sequence": [1,2,2,11,1]
+    },
+
+    {
+      "scene": "dance_transition",
+      "sequence": [1,9,10,12,9,1]
+    },
+
+    {
+      "scene": "slow_jump_combo",
+      "sequence": [1,2,7,12,1]
+    },
+
+    {
+      "scene": "motion_recovery",
+      "sequence": [1,2,3,2,1,0]
+    },
+
+    {
+      "scene": "performance_mode",
+      "sequence": [1,11,9,10,12,11,1]
+    },
+
+    {
+      "scene": "patrol_and_demo",
+      "sequence": [1,2,3,2,11,1]
+    },
+
+    {
+      "scene": "agility_demo",
+      "sequence": [1,2,6,7,1]
+    },
+
+    {
+      "scene": "full_performance",
+      "sequence": [0,1,2,3,4,3,2,11,12,9,10,8,1,0]
+    }
+  ],
+
+  "abnormal_sequences": [
+
+    {
+      "type": "illegal_transition",
+      "risk": "high",
+      "sequence": [4,0],
+      "reason": "高速运动后瞬间趴下，不符合运动稳定性"
+    },
+
+    {
+      "type": "continuous_backflip",
+      "risk": "critical",
+      "sequence": [8,8,8],
+      "reason": "连续后空翻不符合真实功耗与姿态恢复规律"
+    },
+
+    {
+      "type": "jump_to_run",
+      "risk": "high",
+      "sequence": [7,4],
+      "reason": "跳跃落地后直接高速奔跑不合理"
+    },
+
+    {
+      "type": "semantic_hijack",
+      "risk": "high",
+      "sequence": [2,3,10,4],
+      "reason": "巡逻过程中突然进入舞蹈动作"
+    },
+
+    {
+      "type": "instant_backflip",
+      "risk": "high",
+      "sequence": [0,8],
+      "reason": "趴下状态无法直接后空翻"
+    },
+
+    {
+      "type": "abnormal_performance",
+      "risk": "medium",
+      "sequence": [4,9,4],
+      "reason": "高速运动中插入太空步"
+    },
+
+    {
+      "type": "repeated_jump",
+      "risk": "medium",
+      "sequence": [7,7,7,7],
+      "reason": "持续跳跃不符合稳定控制"
+    },
+
+    {
+      "type": "reverse_flip",
+      "risk": "critical",
+      "sequence": [5,8],
+      "reason": "后退过程中直接后空翻"
+    }
+  ],
+
+  "state_constraint_rules": [
+
+    {
+      "rule": "run_fast_cannot_directly_lie_down",
+      "from": 4,
+      "to": 0,
+      "score": 0.99
+    },
+
+    {
+      "rule": "lie_down_cannot_directly_backflip",
+      "from": 0,
+      "to": 8,
+      "score": 0.98
+    },
+
+    {
+      "rule": "forward_jump_should_recover_before_running",
+      "from": 7,
+      "to": 4,
+      "score": 0.95
+    },
+
+    {
+      "rule": "continuous_backflip_is_abnormal",
+      "from": 8,
+      "to": 8,
+      "score": 0.97
+    }
+  ],
+
+  "recommended_detection_logic": {
+    "method": "Markov + AMNAR",
+    "window_size": 3,
+    "sequence_length": 5,
+    "abnormal_threshold": 0.15,
+    "risk_formula": "risk = 1 - transition_probability"
+  }
+}

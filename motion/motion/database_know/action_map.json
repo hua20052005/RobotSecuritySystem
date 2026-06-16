@@ -1,0 +1,15 @@
+{
+	"0": "lie_down",
+	"1": "stand",
+	"2": "walk_slow",
+	"3": "walk_mid",
+	"4": "run_fast",
+	"5": "backward",
+	"6": "side_jump",
+	"7": "forward_jump",
+	"8": "backflip",
+	"9": "moonwalk",
+	"10": "dance2",
+	"11": "hello",
+	"12": "twist_body"
+}

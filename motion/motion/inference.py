@@ -15,10 +15,24 @@ import csv
 import json
 import socket
 import struct
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
+
+from papb_validator import END_ACTION, PapbValidator
+
+SRC_ROOT = Path(__file__).resolve().parent / "src"
+if SRC_ROOT.exists() and str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+try:
+    from robot_traffic_action.model import load_model as load_signal_model
+    from robot_traffic_action.model import predict_pcap as signal_predict_pcap
+except Exception:  # pragma: no cover - optional pipeline
+    load_signal_model = None
+    signal_predict_pcap = None
 
 
 # ============================================================================
@@ -272,6 +286,7 @@ class MotionAnomalyModel:
         self.action_thresholds = self._load_thresholds()
         
         # 加载动作转移图（允许的后继动作）
+        self.start_actions = set()
         self.adjacency = self._load_adjacency()
         
         print(f"✓ 模型已加载: {len(self.templates)} 个动作模板")
@@ -353,44 +368,6 @@ class MotionAnomalyModel:
         
         return chr(ord("A") + cluster)
 
-    def predict_valid_next_actions(self, executed_sequence, start_actions=None):
-        """
-        PAPB 逻辑：预测当前合法的后继动作
-        （这部分与 model_motion_sequences.py 的 predict_valid_next_actions 相同）
-        """
-        start_actions = set(start_actions or [])
-        cleaned = [action for action in executed_sequence if action]
-        if not cleaned:
-            return start_actions, set(), 0
-
-        n = len(cleaned)
-        dp = [1] * n
-        subseq_actions = [{action} for action in cleaned]
-
-        for i in range(1, n):
-            for j in range(i):
-                yi, yj = cleaned[i], cleaned[j]
-                if yi in self.adjacency.get(yj, []):
-                    candidate_len = dp[j] + 1
-                    candidate_actions = subseq_actions[j] | {yi}
-                    if candidate_len > dp[i]:
-                        dp[i] = candidate_len
-                        subseq_actions[i] = candidate_actions
-                    elif candidate_len == dp[i]:
-                        subseq_actions[i] |= candidate_actions
-
-        max_len = max(dp)
-        matched_actions = set()
-        for i, length in enumerate(dp):
-            if length == max_len:
-                matched_actions |= subseq_actions[i]
-
-        valid_next = set()
-        for action in matched_actions:
-            valid_next |= set(self.adjacency.get(action, []))
-        valid_next -= matched_actions
-        return valid_next, matched_actions, max_len
-
     def best_template_match(self, sequence, label):
         """RMB：找到最相似的模板"""
         if label not in self.templates:
@@ -424,7 +401,17 @@ class InferenceEngine:
       5. 逐步决策输出
     """
     
-    def __init__(self, model_dir, local_ips=None, window_ms=100, exclude_ports=None, enable_papb=True):
+    def __init__(
+        self,
+        model_dir,
+        local_ips=None,
+        window_ms=100,
+        exclude_ports=None,
+        enable_papb=True,
+        signal_model_path=None,
+        signal_confidence_threshold=0.6,
+        signal_fusion="none",
+    ):
         self.model = MotionAnomalyModel(model_dir)
         self.window_ms = window_ms
         self.exclude_ports = exclude_ports or {22}
@@ -436,6 +423,48 @@ class InferenceEngine:
         # 用于跨文件的动作链追踪（可选）
         self.action_sequence = []  # 已执行的动作列表
         self.violations = []  # 记录的违规
+
+        # PAPB validator (state transition checker)
+        self.papb_validator = PapbValidator(self.model.adjacency)
+
+        # Signal-based classifier (from zip method)
+        self.signal_model = None
+        self.signal_model_path = None
+        self.signal_load_error = None
+        self.signal_confidence_threshold = signal_confidence_threshold
+        self.signal_fusion = signal_fusion
+        require_signal = bool(signal_model_path) or self.signal_fusion != "none"
+        self._load_signal_model(model_dir, signal_model_path, require=require_signal)
+
+    def _load_signal_model(self, model_dir, signal_model_path, require=False):
+        if load_signal_model is None or signal_predict_pcap is None:
+            return
+
+        if signal_model_path:
+            model_path = Path(signal_model_path)
+        else:
+            model_path = Path(model_dir) / "signal_pipeline" / "signal_action_model.joblib"
+
+        if not model_path.exists():
+            if require:
+                self.signal_load_error = f"Signal model not found: {model_path}"
+            return
+
+        try:
+            self.signal_model = load_signal_model(model_path)
+            self.signal_model_path = model_path
+            print(f"✓ Signal 模型已加载: {model_path}")
+        except Exception as exc:
+            self.signal_load_error = str(exc)
+
+    def _predict_signal(self, pcap_path):
+        if self.signal_model is None:
+            return None, self.signal_load_error
+        try:
+            result = signal_predict_pcap(self.signal_model, pcap_path)
+            return result, None
+        except Exception as exc:
+            return None, str(exc)
 
     def detect_from_pcap(self, pcap_path):
         """
@@ -519,6 +548,20 @@ class InferenceEngine:
         matched_labels = [r["label"] for r in match_results if r["is_match"]]
         best_match = max(match_results, key=lambda x: x["best_similarity"])
         
+        # Signal 分支（zip 方法）
+        signal_result, signal_error = self._predict_signal(pcap_path)
+        signal_payload = None
+        signal_label = None
+        signal_confidence = None
+        if signal_result:
+            signal_label = signal_result.get("predicted")
+            signal_confidence = signal_result.get("confidence")
+            signal_payload = {
+                "predicted": signal_label,
+                "confidence": signal_confidence,
+                "proba": signal_result.get("proba", {}),
+            }
+
         # 第四步：PAPB 动作转移验证（可选）
         papb_violations = []
         papb_decision = "PASS"
@@ -526,9 +569,12 @@ class InferenceEngine:
         if self.enable_papb and matched_labels:
             # 获得该文件的主要动作标签
             primary_action = best_match["label"]
+            papb_action = primary_action
+            if self.signal_fusion == "signal_primary" and signal_label:
+                papb_action = signal_label
             
             # 使用PAPB验证这个动作是否是合法的后继
-            valid_next_actions, executed_actions, max_len = self.model.predict_valid_next_actions(
+            valid_next_actions, executed_actions, max_len = self.papb_validator.predict_valid_next_actions(
                 self.action_sequence
             )
             
@@ -537,22 +583,22 @@ class InferenceEngine:
             print(f"    合法的后继动作: {valid_next_actions or '(任意动作)'}")
             
             # 检查该动作是否合法
-            is_valid_successor = (not valid_next_actions) or (primary_action in valid_next_actions)
+            is_valid_successor = (not valid_next_actions) or (papb_action in valid_next_actions)
             
             if not is_valid_successor:
                 papb_violations.append({
-                    "reason": f"'{primary_action}' is not a legal next action",
+                    "reason": f"'{papb_action}' is not a legal next action",
                     "expected": sorted(valid_next_actions),
-                    "actual": primary_action
+                    "actual": papb_action
                 })
                 papb_decision = "REJECT"
             
             # 更新动作链
             if is_valid_successor:
-                self.action_sequence.append(primary_action)
+                self.action_sequence.append(papb_action)
                 print(f"  ✅ 动作序列扩展: {' → '.join(self.action_sequence)}")
             else:
-                print(f"  ⚠️  动作转移违规: {primary_action} 不在合法后继中")
+                print(f"  ⚠️  动作转移违规: {papb_action} 不在合法后继中")
         
         # 综合判定
         is_normal = len(matched_labels) > 0  # RMB: 至少匹配一个动作
@@ -560,6 +606,7 @@ class InferenceEngine:
             is_normal = is_normal and papb_decision == "PASS"  # 同时通过PAPB
         
         is_anomaly = not is_normal
+        base_status = "ANOMALY" if is_anomaly else "NORMAL"
         
         # 生成详细报告
         template_violations = []
@@ -578,9 +625,27 @@ class InferenceEngine:
         # 置信度：最接近的匹配与其阈值的距离
         margin = best_match["best_similarity"] - best_match["similarity_threshold"]
         confidence = abs(margin)  # 离边界有多远
-        
+
+        final_status = base_status
+        fusion_reason = None
+        primary_action = best_match["label"]
+        meets_confidence = (
+            signal_confidence is None or signal_confidence >= self.signal_confidence_threshold
+        )
+        if signal_payload and self.signal_fusion == "signal_primary":
+            if meets_confidence and signal_label:
+                primary_action = signal_label
+                final_status = "NORMAL"
+                fusion_reason = "signal_primary"
+            else:
+                fusion_reason = "signal_primary_fallback"
+        elif signal_payload and self.signal_fusion == "disagree":
+            if meets_confidence and matched_labels and signal_label and signal_label not in matched_labels:
+                final_status = "ANOMALY"
+                fusion_reason = "signal_disagrees_with_template_match"
+
         result = {
-            "status": "ANOMALY" if is_anomaly else "NORMAL",
+            "status": final_status,
             "confidence": float(confidence),
             "details": {
                 "pcap_file": str(pcap_path),
@@ -589,7 +654,8 @@ class InferenceEngine:
                 "duration_s": metadata["duration_s"],
                 "action_sequence": compressed_seq,
                 "sequence_length": len(compressed_seq),
-                "primary_action": best_match["label"],
+                "primary_action": primary_action,
+                "base_status": base_status,
                 "matched_actions": matched_labels,
                 "matches": [
                     {
@@ -605,7 +671,13 @@ class InferenceEngine:
                 "rbm_anomalies": template_violations,
                 "papb_anomalies": papb_violations if self.enable_papb else [],
                 "papb_enabled": self.enable_papb,
-                "papb_decision": papb_decision if self.enable_papb else "DISABLED"
+                "papb_decision": papb_decision if self.enable_papb else "DISABLED",
+                "signal": signal_payload,
+                "signal_error": signal_error,
+                "signal_model": str(self.signal_model_path) if self.signal_model_path else None,
+                "signal_fusion": self.signal_fusion,
+                "signal_confidence_threshold": self.signal_confidence_threshold,
+                "fusion_reason": fusion_reason,
             }
         }
         
@@ -654,6 +726,23 @@ def main():
         help="Enable PAPB (action transition coherence checking) for multi-pcap sequences"
     )
     parser.add_argument(
+        "--signal-model",
+        default="",
+        help="Optional signal model path (.joblib). Defaults to model_dir/signal_pipeline/signal_action_model.joblib"
+    )
+    parser.add_argument(
+        "--signal-fusion",
+        choices=["none", "disagree", "signal_primary"],
+        default="signal_primary",
+        help="Fuse signal classifier with sequence model (none|disagree|signal_primary)"
+    )
+    parser.add_argument(
+        "--signal-confidence",
+        type=float,
+        default=0.6,
+        help="Signal confidence threshold used by fusion"
+    )
+    parser.add_argument(
         "--output",
         default="inference_results.json",
         help="Output file for results"
@@ -667,7 +756,10 @@ def main():
         args.model_dir,
         local_ips=local_ips,
         window_ms=args.window_ms,
-        enable_papb=args.enable_papb
+        enable_papb=args.enable_papb,
+        signal_model_path=args.signal_model or None,
+        signal_confidence_threshold=args.signal_confidence,
+        signal_fusion=args.signal_fusion,
     )
     
     # 处理输入
@@ -708,6 +800,27 @@ def main():
         confidence = result["confidence"]
         primary_action = result["details"].get("primary_action", "?")
         print(f"\n  {pcap_name:30} -> {status:10} ({primary_action:6}) confidence: {confidence:.3f}")
+
+        base_status = result["details"].get("base_status")
+        if base_status and base_status != status:
+            print(f"    base_status: {base_status}")
+
+        signal = result["details"].get("signal")
+        if signal:
+            signal_label = signal.get("predicted")
+            signal_conf = signal.get("confidence")
+            if signal_conf is not None:
+                print(f"    signal: {signal_label} confidence={signal_conf:.3f}")
+            else:
+                print(f"    signal: {signal_label}")
+
+        signal_error = result["details"].get("signal_error")
+        if signal_error:
+            print(f"    signal_error: {signal_error}")
+
+        fusion_reason = result["details"].get("fusion_reason")
+        if fusion_reason:
+            print(f"    fusion_reason: {fusion_reason}")
         
         # 显示PAPB异常
         if result["details"].get("papb_anomalies"):

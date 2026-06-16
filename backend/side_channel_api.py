@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import ipaddress
+import socket
 import tempfile
 import uuid
 from pathlib import Path
@@ -8,6 +10,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+import requests
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sklearn.ensemble import IsolationForest
 
@@ -53,6 +56,43 @@ FEATURE_DEFS: List[Dict[str, str]] = [
 DEFAULT_FEATURES = ["size", "interval", "port"]
 ALLOWED_FEATURES = {item["key"] for item in FEATURE_DEFS}
 
+# 直连用的 Session：trust_env=False 让 requests 忽略系统/环境变量里的代理
+# （如 HTTP_PROXY=127.0.0.1:7890）。否则代理软件没运行时，IP 归属地查询会
+# 被发往本地代理端口并超时。这里固定走直连，查询更稳定。
+_HTTP = requests.Session()
+_HTTP.trust_env = False
+IP_LOOKUP_LIMIT = 100
+IPWHOIS_LOOKUP_LIMIT = 30
+IP_API_FIELDS = "status,message,country,countryCode,regionName,city,isp,org,as,asname,mobile,proxy,hosting,query"
+PORT_SERVICE_OVERRIDES = {
+    20: "FTP data",
+    21: "FTP control",
+    22: "SSH",
+    23: "Telnet",
+    25: "SMTP",
+    53: "DNS",
+    80: "HTTP",
+    110: "POP3",
+    123: "NTP",
+    143: "IMAP",
+    443: "HTTPS",
+    445: "SMB",
+    502: "Modbus/TCP",
+    554: "RTSP",
+    1883: "MQTT",
+    4840: "OPC UA",
+    5672: "AMQP",
+    5900: "VNC",
+    6379: "Redis",
+    7400: "DDS/RTPS",
+    7401: "DDS/RTPS",
+    7402: "DDS/RTPS",
+    8080: "HTTP alternate",
+    8883: "MQTT over TLS",
+    9090: "ROS bridge/WebSocket",
+    11311: "ROS master",
+}
+
 
 def _parse_features(raw: Optional[str]) -> List[str]:
     if not raw:
@@ -80,6 +120,269 @@ def _parse_features(raw: Optional[str]) -> List[str]:
     if invalid:
         raise HTTPException(status_code=400, detail=f"unsupported features: {', '.join(invalid)}")
     return features
+
+
+def _ip_scope(ip: str) -> str:
+    try:
+        parsed = ipaddress.ip_address(ip)
+    except ValueError:
+        return "invalid"
+    if parsed.is_private:
+        return "private"
+    if parsed.is_loopback:
+        return "loopback"
+    if parsed.is_link_local:
+        return "link-local"
+    if parsed.is_multicast:
+        return "multicast"
+    if parsed.is_reserved:
+        return "reserved"
+    if parsed.is_unspecified:
+        return "unspecified"
+    return "public"
+
+
+def _ip_long(ip: str) -> Optional[int]:
+    try:
+        parsed = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    if parsed.version != 4:
+        return None
+    return int(parsed)
+
+
+def _format_location(*parts: object) -> str:
+    values = []
+    for part in parts:
+        text = str(part or "").strip()
+        if text and text != "-":
+            values.append(text)
+    return " ".join(values) if values else "-"
+
+
+def _service_name(port: object) -> str:
+    try:
+        port_int = int(port)
+    except (TypeError, ValueError):
+        return "unknown"
+    if port_int <= 0:
+        return "unknown"
+    if port_int in PORT_SERVICE_OVERRIDES:
+        return PORT_SERVICE_OVERRIDES[port_int]
+    for proto in ("tcp", "udp"):
+        try:
+            return socket.getservbyport(port_int, proto).upper()
+        except OSError:
+            continue
+    return "unknown"
+
+
+def _ptr_lookup(ip: str) -> Optional[str]:
+    old_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(1.5)
+        return socket.gethostbyaddr(ip)[0]
+    except (OSError, socket.herror, socket.gaierror, TimeoutError):
+        return None
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+
+
+def _lookup_ipwhois_ips(ips: List[str]) -> tuple[Dict[str, Dict[str, object]], Optional[str]]:
+    lookup: Dict[str, Dict[str, object]] = {}
+    error: Optional[str] = None
+    for ip in ips[:IPWHOIS_LOOKUP_LIMIT]:
+        try:
+            response = _HTTP.get(f"http://ipwho.is/{ip}", timeout=4)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict):
+                lookup[ip] = data
+        except requests.RequestException as exc:
+            error = f"{type(exc).__name__}: {exc}"
+        except ValueError as exc:
+            error = f"invalid ipwho.is response: {exc}"
+    return lookup, error
+
+
+def _lookup_public_ips(ips: List[str]) -> tuple[Dict[str, Dict[str, object]], Dict[str, object]]:
+    lookup: Dict[str, Dict[str, object]] = {}
+    meta: Dict[str, object] = {
+        "provider": "ip-api.com batch + ipwho.is + DNS PTR",
+        "queried": 0,
+        "limit": IP_LOOKUP_LIMIT,
+        "error": None,
+        "sources": ["ip-api.com", "ipwho.is", "PTR"],
+    }
+
+    public_ips = [ip for ip in ips if _ip_scope(ip) == "public"][:IP_LOOKUP_LIMIT]
+    meta["queried"] = len(public_ips)
+    if not public_ips:
+        return lookup, meta
+
+    try:
+        response = _HTTP.post(
+            "http://ip-api.com/batch",
+            params={"fields": IP_API_FIELDS, "lang": "zh-CN"},
+            json=public_ips,
+            timeout=5,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and item.get("query"):
+                    lookup[str(item["query"])] = item
+    except requests.RequestException as exc:
+        meta["error"] = f"{type(exc).__name__}: {exc}"
+    except ValueError as exc:
+        meta["error"] = f"invalid lookup response: {exc}"
+
+    ipwhois_lookup, ipwhois_error = _lookup_ipwhois_ips(public_ips)
+    if ipwhois_error and not meta["error"]:
+        meta["error"] = ipwhois_error
+
+    for ip in public_ips:
+        lookup.setdefault(ip, {})
+        lookup[ip]["ptr"] = _ptr_lookup(ip)
+        lookup[ip]["ipwhois"] = ipwhois_lookup.get(ip, {})
+
+    return lookup, meta
+
+
+def _build_ip_port_profiles(df: pd.DataFrame) -> Dict[str, object]:
+    columns = [
+        "ip",
+        "ip_long",
+        "scope",
+        "observed_as_src",
+        "observed_as_dst",
+        "ports",
+        "services",
+        "ptr",
+        "best_location",
+        "ip_api_location",
+        "ipwhois_location",
+        "ip2region_location",
+        "geolite2_location",
+        "dbip_location",
+        "isp",
+        "org",
+        "asn",
+        "risk_tags",
+        "lookup_status",
+    ]
+    if df.empty:
+        return {"columns": columns, "rows": [], "total": 0, "lookup": {"queried": 0, "limit": IP_LOOKUP_LIMIT, "error": None}}
+
+    profiles: Dict[str, Dict[str, object]] = {}
+
+    def ensure(ip: str) -> Dict[str, object]:
+        entry = profiles.setdefault(
+            ip,
+            {
+                "ip": ip,
+                "scope": _ip_scope(ip),
+                "observed_as_src": 0,
+                "observed_as_dst": 0,
+                "_ports": set(),
+                "_services": set(),
+            },
+        )
+        return entry
+
+    for row in df[["src", "dst", "port"]].fillna("").to_dict("records"):
+        src = str(row.get("src") or "").strip()
+        dst = str(row.get("dst") or "").strip()
+        port_raw = row.get("port")
+        try:
+            port = int(float(port_raw)) if str(port_raw).strip() else 0
+        except (TypeError, ValueError):
+            port = 0
+
+        if src:
+            ensure(src)["observed_as_src"] = int(ensure(src)["observed_as_src"]) + 1
+        if dst:
+            dst_entry = ensure(dst)
+            dst_entry["observed_as_dst"] = int(dst_entry["observed_as_dst"]) + 1
+            if port > 0:
+                dst_entry["_ports"].add(port)
+                dst_entry["_services"].add(_service_name(port))
+
+    ordered_ips = sorted(
+        profiles,
+        key=lambda ip: (
+            profiles[ip]["scope"] != "public",
+            -(int(profiles[ip]["observed_as_src"]) + int(profiles[ip]["observed_as_dst"])),
+            ip,
+        ),
+    )
+    lookup, meta = _lookup_public_ips(ordered_ips)
+
+    rows: List[Dict[str, object]] = []
+    for ip in ordered_ips:
+        entry = profiles[ip]
+        info = lookup.get(ip, {})
+        ipwhois = info.get("ipwhois") if isinstance(info.get("ipwhois"), dict) else {}
+        risk_tags = []
+        if info.get("hosting"):
+            risk_tags.append("hosting/datacenter")
+        if info.get("proxy"):
+            risk_tags.append("proxy/vpn/tor")
+        if info.get("mobile"):
+            risk_tags.append("mobile")
+
+        ip_api_location = _format_location(info.get("country"), info.get("regionName"), info.get("city"))
+        ipwhois_location = _format_location(
+            ipwhois.get("country"),
+            ipwhois.get("region"),
+            ipwhois.get("city"),
+        )
+        best_location = ip_api_location if ip_api_location != "-" else ipwhois_location
+
+        status = info.get("status")
+        if entry["scope"] != "public":
+            lookup_status = "skipped-private"
+        elif status == "success" or ipwhois.get("success") or info.get("ptr"):
+            lookup_status = "success"
+        elif status == "fail":
+            lookup_status = str(info.get("message") or "fail")
+        elif meta.get("error"):
+            lookup_status = "lookup-error"
+        else:
+            lookup_status = "no-data"
+
+        ports = sorted(entry["_ports"])
+        services = sorted(s for s in entry["_services"] if s and s != "unknown")
+        connection = ipwhois.get("connection") if isinstance(ipwhois.get("connection"), dict) else {}
+        org = info.get("org") or connection.get("org") or "-"
+        asn = info.get("as") or connection.get("asn") or info.get("asname") or "-"
+        rows.append(
+            {
+                "ip": ip,
+                "ip_long": _ip_long(ip) or "-",
+                "scope": entry["scope"],
+                "observed_as_src": entry["observed_as_src"],
+                "observed_as_dst": entry["observed_as_dst"],
+                "ports": ", ".join(str(port) for port in ports) or "-",
+                "services": ", ".join(services) or "unknown",
+                "ptr": info.get("ptr") or "-",
+                "best_location": best_location,
+                "ip_api_location": ip_api_location,
+                "ipwhois_location": ipwhois_location,
+                "ip2region_location": "-",
+                "geolite2_location": "-",
+                "dbip_location": "-",
+                "isp": info.get("isp") or ipwhois.get("isp") or "-",
+                "org": org,
+                "asn": asn,
+                "risk_tags": ", ".join(risk_tags) or "-",
+                "lookup_status": lookup_status,
+            }
+        )
+
+    return {"columns": columns, "rows": rows, "total": len(rows), "lookup": meta}
 
 
 def _build_table(df: pd.DataFrame, limit: int) -> Dict[str, object]:
@@ -169,6 +472,7 @@ async def analyze_side_channel(
             "histogram": {"bins": [], "counts": []},
             "anomalies": {"columns": [], "rows": [], "total": 0, "limit": anomaly_limit},
             "target_hits": {"columns": [], "rows": [], "total": 0, "limit": anomaly_limit},
+            "ip_port_profiles": _build_ip_port_profiles(df),
         }
         create_task(
             task_id=run_id,
@@ -242,6 +546,7 @@ async def analyze_side_channel(
         },
         "anomalies": _build_table(anomalies, anomaly_limit),
         "target_hits": _build_table(target_hits, anomaly_limit),
+        "ip_port_profiles": _build_ip_port_profiles(df),
     }
     create_task(
         task_id=run_id,

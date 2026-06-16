@@ -1,0 +1,306 @@
+from __future__ import annotations
+
+import json
+import sys
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from backend.auth import optional_user
+from backend.db import create_task
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PAPB_ROOT = PROJECT_ROOT / "motion" / "motion"
+DEFAULT_DATASET = PAPB_ROOT / "papb_synthetic_sequences.json"
+DEFAULT_MODEL = PAPB_ROOT / "papb_trained_model.json"
+DEFAULT_REVIEW = PAPB_ROOT / "papb_pending_review.json"
+
+if str(PAPB_ROOT) not in sys.path:
+    sys.path.insert(0, str(PAPB_ROOT))
+
+from papb_validator import PapbValidator, add_pending_review, review_sequence  # noqa: E402
+
+router = APIRouter(prefix="/api/papb", tags=["papb"])
+
+
+class ActionItem(BaseModel):
+    label: str
+    confidence: Optional[float] = None
+    embedding: Optional[List[float]] = None
+
+
+class DetectRequest(BaseModel):
+    actions: Optional[List[Union[str, ActionItem]]] = None
+    sequence: str = ""
+    auto_review: bool = True
+    require_terminal: bool = True
+    save_history: bool = True
+    source: str = "manual"
+
+
+class ReviewRequest(BaseModel):
+    decision: str = Field(..., pattern="^(ACCEPT_NORMAL|REJECT_ANOMALY)$")
+    comment: str = ""
+
+
+class RetrainRequest(BaseModel):
+    critical_min_support: float = 0.8
+    noncritical_actions: List[str] = Field(default_factory=list)
+    max_edit_distance: int = 1
+    max_error_ratio: float = 0.0
+
+
+class TrainingSequenceRequest(BaseModel):
+    actions: List[str] = Field(default_factory=list)
+    note: str = ""
+
+
+def _read_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _parse_sequence_text(value: str) -> List[str]:
+    normalized = (
+        value.replace("->", ",")
+        .replace("→", ",")
+        .replace("\r\n", ",")
+        .replace("\n", ",")
+        .replace("，", ",")
+        .replace("、", ",")
+    )
+    return [part.strip() for part in normalized.split(",") if part.strip()]
+
+
+def _model_dump(model: BaseModel) -> Dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump(exclude_none=True)
+    return model.dict(exclude_none=True)
+
+
+def _normalize_actions(payload: DetectRequest) -> List[Union[str, Dict[str, Any]]]:
+    if payload.actions:
+        normalized: List[Union[str, Dict[str, Any]]] = []
+        for item in payload.actions:
+            if isinstance(item, str):
+                label = item.strip()
+                if label:
+                    normalized.append(label)
+            else:
+                data = _model_dump(item)
+                data["label"] = data.get("label", "").strip()
+                if data["label"]:
+                    normalized.append(data)
+        return normalized
+    return _parse_sequence_text(payload.sequence)
+
+
+def _labels(actions: List[Union[str, Dict[str, Any]]]) -> List[str]:
+    labels: List[str] = []
+    for item in actions:
+        if isinstance(item, dict):
+            label = str(item.get("label", "")).strip()
+        else:
+            label = str(item).strip()
+        if label:
+            labels.append(label)
+    return labels
+
+
+def _load_validator() -> PapbValidator:
+    if DEFAULT_MODEL.exists():
+        return PapbValidator.from_json(DEFAULT_MODEL)
+    if DEFAULT_DATASET.exists():
+        return PapbValidator.fit_from_json(DEFAULT_DATASET)
+    raise HTTPException(status_code=500, detail=f"PAPB dataset not found: {DEFAULT_DATASET}")
+
+
+def _pending_store() -> Dict[str, Any]:
+    store = _read_json(DEFAULT_REVIEW, {"pending": [], "reviewed": []})
+    store.setdefault("pending", [])
+    store.setdefault("reviewed", [])
+    return store
+
+
+def _dataset() -> Dict[str, Any]:
+    return _read_json(DEFAULT_DATASET, {})
+
+
+def _model_data() -> Dict[str, Any]:
+    return _read_json(DEFAULT_MODEL, {})
+
+
+def _templates() -> List[List[str]]:
+    dataset = _dataset()
+    model = _model_data()
+    return model.get("normal_templates") or dataset.get("normal_templates") or []
+
+
+def _summary() -> Dict[str, Any]:
+    dataset = _dataset()
+    model = _model_data()
+    review = _pending_store()
+    templates = _templates()
+    training_sequences = dataset.get("training_sequences") or dataset.get("normal_sequences") or []
+    actions = sorted({action for template in templates for action in template})
+    return {
+        "dataset_path": str(DEFAULT_DATASET),
+        "model_path": str(DEFAULT_MODEL),
+        "review_path": str(DEFAULT_REVIEW),
+        "model_exists": DEFAULT_MODEL.exists(),
+        "template_count": len(templates),
+        "training_sequence_count": len(training_sequences),
+        "action_count": len(actions),
+        "actions": actions,
+        "critical_actions": model.get("critical_actions", dataset.get("critical_actions", [])),
+        "noncritical_actions": model.get("noncritical_actions", dataset.get("noncritical_actions", [])),
+        "pending_count": len([item for item in review["pending"] if item.get("status") == "PENDING"]),
+        "reviewed_count": len(review["reviewed"]),
+    }
+
+
+def _task_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    status = str(result.get("status", "UNKNOWN"))
+    return {
+        "status": status,
+        "action_count": result.get("action_count", 0),
+        "transition_count": result.get("transition_count", 0),
+        "violation_count": len(result.get("violations", [])),
+        "unknown": status == "UNKNOWN_VALIDITY",
+        "abnormal": 1 if status == "ANOMALY" else 0,
+    }
+
+
+@router.get("/summary")
+def papb_summary() -> Dict[str, Any]:
+    return _summary()
+
+
+@router.get("/model")
+def model_detail() -> Dict[str, Any]:
+    dataset = _dataset()
+    model = _model_data()
+    return {
+        "summary": _summary(),
+        "normal_templates": _templates(),
+        "training_sequences": dataset.get("training_sequences", []),
+        "evaluation_sequences": dataset.get("evaluation_sequences", []),
+        "max_repeats": model.get("max_repeats", dataset.get("max_repeats", {})),
+        "critical_actions": model.get("critical_actions", dataset.get("critical_actions", [])),
+        "noncritical_actions": model.get("noncritical_actions", dataset.get("noncritical_actions", [])),
+    }
+
+
+@router.post("/training-sequences")
+def add_training_sequence(payload: TrainingSequenceRequest) -> Dict[str, Any]:
+    actions = [str(action).strip() for action in payload.actions if str(action).strip()]
+    if not actions:
+        raise HTTPException(status_code=400, detail="请至少提供一个动作标签")
+
+    dataset = _dataset()
+    dataset.setdefault("training_sequences", [])
+    dataset["training_sequences"].append(actions)
+    dataset.setdefault("normal_templates", [])
+    if actions not in dataset["normal_templates"]:
+        dataset["normal_templates"].append(actions)
+    _write_json(DEFAULT_DATASET, dataset)
+    return {"added": actions, "summary": _summary()}
+
+
+@router.post("/detect")
+def detect_sequence(
+    payload: DetectRequest,
+    user: Optional[Dict[str, Any]] = Depends(optional_user),
+) -> Dict[str, Any]:
+    actions = _normalize_actions(payload)
+    labels = _labels(actions)
+    if not labels:
+        raise HTTPException(status_code=400, detail="请至少输入一个动作标签")
+
+    validator = _load_validator()
+    result = validator.validate_sequence(actions, require_terminal=payload.require_terminal)
+    result["input_actions"] = labels
+    result["source"] = payload.source
+
+    if payload.auto_review and result.get("status") == "UNKNOWN_VALIDITY":
+        result["review"] = add_pending_review(
+            DEFAULT_REVIEW,
+            actions=labels,
+            result=result,
+        )
+
+    if payload.save_history:
+        task_id = "papb_" + uuid.uuid4().hex[:10]
+        result["task_id"] = task_id
+        create_task(
+            task_id=task_id,
+            module="papb",
+            title=f"PAPB流程检测 - {result.get('status')}",
+            parameters={
+                "actions": labels,
+                "auto_review": payload.auto_review,
+                "require_terminal": payload.require_terminal,
+                "source": payload.source,
+            },
+            summary=_task_summary(result),
+            result=result,
+            files={"dataset": str(DEFAULT_DATASET), "model": str(DEFAULT_MODEL)},
+            user_id=int(user["id"]) if isinstance(user, dict) else None,
+        )
+    return result
+
+
+@router.get("/review/pending")
+def pending_review() -> Dict[str, Any]:
+    store = _pending_store()
+    pending = [item for item in store["pending"] if item.get("status") == "PENDING"]
+    return {"pending": pending, "reviewed": store["reviewed"]}
+
+
+@router.post("/review/{review_id}")
+def submit_review(review_id: str, payload: ReviewRequest) -> Dict[str, Any]:
+    try:
+        item = review_sequence(
+            DEFAULT_REVIEW,
+            DEFAULT_DATASET,
+            review_id,
+            payload.decision,
+            comment=payload.comment,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"item": item, "summary": _summary()}
+
+
+@router.post("/retrain")
+def retrain_model(payload: RetrainRequest) -> Dict[str, Any]:
+    if not DEFAULT_DATASET.exists():
+        raise HTTPException(status_code=500, detail=f"PAPB dataset not found: {DEFAULT_DATASET}")
+
+    validator = PapbValidator.fit_from_json(
+        DEFAULT_DATASET,
+        critical_min_support=payload.critical_min_support,
+        noncritical_actions=payload.noncritical_actions,
+        max_edit_distance=payload.max_edit_distance,
+        max_error_ratio=payload.max_error_ratio,
+        require_terminal=True,
+    )
+    validator.save_model(DEFAULT_MODEL)
+    evaluation = {}
+    dataset = _dataset()
+    if dataset.get("evaluation_sequences"):
+        evaluation = validator.evaluate_dataset(dataset["evaluation_sequences"])
+    return {
+        "message": "PAPB model retrained",
+        "summary": _summary(),
+        "evaluation": evaluation,
+    }

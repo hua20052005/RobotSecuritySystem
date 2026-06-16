@@ -132,7 +132,6 @@ const generateReport = async () => {
         <h2 class="section-title">运动时序建模</h2>
         <p class="panel-sub">基于动作 PCAP 样本构建符号序列模板，评估动作一致性、可分性与任务转移异常。</p>
       </div>
-      <div class="pill-badge">Temporal Model</div>
     </div>
 
     <div class="grid-3" style="margin-top: 20px;">

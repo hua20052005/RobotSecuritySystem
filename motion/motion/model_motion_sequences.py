@@ -6,14 +6,35 @@ import os
 import random
 import socket
 import struct
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+SRC_ROOT = Path(__file__).resolve().parent / "src"
+if SRC_ROOT.exists() and str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+try:
+    from robot_traffic_action.features import extract_features
+    from robot_traffic_action.model import (
+        leave_one_out_report,
+        load_dataset,
+        save_model,
+        train_action_model,
+    )
+except Exception:  # pragma: no cover - optional pipeline
+    extract_features = None
+    leave_one_out_report = None
+    load_dataset = None
+    save_model = None
+    train_action_model = None
+
 
 DEFAULT_EXCLUDE_PORTS = {22}
+END_ACTION = "__END__"
 
 
 def read_pcap_packets(path):
@@ -456,6 +477,54 @@ def parse_task_sequence(value):
     return [part.strip() for part in value.replace("->", ",").split(",") if part.strip()]
 
 
+def _resolve_action_map(data, source_path):
+    action_map = {}
+    if isinstance(data, dict):
+        action_map = data.get("actions") or data.get("action_map") or {}
+
+    if not action_map and source_path:
+        candidate = Path(source_path).with_name("action_map.json")
+        if candidate.exists():
+            action_map = json.loads(candidate.read_text(encoding="utf-8"))
+
+    return {
+        str(key).strip(): str(value).strip()
+        for key, value in (action_map or {}).items()
+        if str(value).strip()
+    }
+
+
+def _coerce_action_label(value, action_map):
+    label = str(value).strip()
+    if not label:
+        return ""
+
+    mapped = action_map.get(label)
+    if mapped is not None:
+        return str(mapped).strip()
+
+    if action_map:
+        try:
+            numeric_key = str(int(float(label)))
+        except ValueError:
+            numeric_key = ""
+        if numeric_key:
+            mapped = action_map.get(numeric_key)
+            if mapped is not None:
+                return str(mapped).strip()
+
+    return label
+
+
+def _map_task_sequence(sequence, action_map):
+    mapped = []
+    for item in sequence:
+        label = _coerce_action_label(item, action_map)
+        if label:
+            mapped.append(label)
+    return mapped
+
+
 def load_task_sequences(path):
     if not path:
         return []
@@ -465,9 +534,28 @@ def load_task_sequences(path):
 
     if task_path.suffix.lower() == ".json":
         data = json.loads(task_path.read_text(encoding="utf-8"))
+        action_map = _resolve_action_map(data, task_path)
         if isinstance(data, dict):
-            data = data.get("sequences", [])
-        return [list(seq) for seq in data if seq]
+            raw = (
+                data.get("sequences")
+                or data.get("normal_sequences")
+                or data.get("task_sequences")
+                or data.get("normal_templates")
+                or data.get("training_sequences")
+                or []
+            )
+        else:
+            raw = data
+
+        sequences = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                seq = entry.get("sequence", entry.get("actions", []))
+            else:
+                seq = entry
+            if seq:
+                sequences.append(_map_task_sequence(seq, action_map))
+        return sequences
 
     sequences = []
     with open(task_path, "r", encoding="utf-8") as f:
@@ -500,6 +588,10 @@ def build_action_transition_graph(task_sequences):
             prefix = tuple(cleaned[:i])
             graph[prefix].add(next_action)
             edge_counts[(prefix, next_action)] += 1
+        if cleaned:
+            prefix = tuple(cleaned)
+            graph[prefix].add(END_ACTION)
+            edge_counts[(prefix, END_ACTION)] += 1
     return {prefix: sorted(next_actions) for prefix, next_actions in graph.items()}, edge_counts
 
 
@@ -516,6 +608,8 @@ def build_action_adjacency(task_sequences):
         for current_action, next_action in zip(cleaned, cleaned[1:]):
             adjacency[current_action].add(next_action)
             edge_counts[(current_action, next_action)] += 1
+        adjacency[cleaned[-1]].add(END_ACTION)
+        edge_counts[(cleaned[-1], END_ACTION)] += 1
     return {action: sorted(next_actions) for action, next_actions in adjacency.items()}, sorted(start_actions), edge_counts
 
 
@@ -554,10 +648,8 @@ def predict_valid_next_actions(executed_sequence, task_graph_adjacency, start_ac
         if length == max_len:
             matched_actions |= subseq_actions[i]
 
-    valid_next = set()
-    for action in matched_actions:
-        valid_next |= set(task_graph_adjacency.get(action, []))
-    valid_next -= matched_actions
+    last_action = cleaned[max(range(n), key=lambda idx: dp[idx])]
+    valid_next = set(task_graph_adjacency.get(last_action, []))
     return valid_next, matched_actions, max_len
 
 
@@ -901,8 +993,108 @@ def write_markdown_report(path, report, templates, template_summary):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def run_signal_pipeline(
+    root: Path,
+    out: Path,
+    *,
+    bin_size: float,
+    protocol: str,
+    positive_ip: str | None,
+    length_mode: str,
+    classifier: str,
+    no_loo: bool,
+) -> dict[str, object]:
+    if extract_features is None or load_dataset is None or train_action_model is None:
+        raise RuntimeError(
+            "robot_traffic_action package is not importable. "
+            "Make sure motion/motion/src is on the PYTHONPATH."
+        )
+
+    out.mkdir(parents=True, exist_ok=True)
+    items = load_dataset(
+        root,
+        bin_size=bin_size,
+        protocol=protocol,
+        positive_ip=positive_ip,
+        length_mode=length_mode,
+    )
+    model = train_action_model(
+        items,
+        bin_size=bin_size,
+        protocol=protocol,
+        length_mode=length_mode,
+        classifier_name=classifier,
+        trim=True,
+    )
+    model_path = out / "signal_action_model.joblib"
+    save_model(model, model_path)
+
+    prediction_rows = []
+    for item in items:
+        fv = extract_features(
+            item.signal,
+            model.templates,
+            bin_size=model.bin_size,
+            trim=model.trim,
+        )
+        pred = str(model.classifier.predict(fv.values.reshape(1, -1))[0])
+        result = {"predicted": pred}
+        if hasattr(model.classifier, "predict_proba"):
+            probs = model.classifier.predict_proba(fv.values.reshape(1, -1))[0]
+            classes = [str(cls) for cls in model.classifier.classes_]
+            proba = {label: float(prob) for label, prob in zip(classes, probs)}
+            result["proba"] = dict(sorted(proba.items()))
+            result["confidence"] = float(max(proba.values())) if proba else None
+        row = {
+            "label": item.label,
+            "sample": item.path.stem,
+            "source_file": str(item.path),
+            "predicted": result.get("predicted", ""),
+            "confidence": result.get("confidence", ""),
+            "proba_json": json.dumps(result.get("proba", {}), ensure_ascii=False),
+        }
+        prediction_rows.append(row)
+
+    prediction_path = out / "signal_predictions.csv"
+    save_csv(
+        prediction_path,
+        prediction_rows,
+        ["label", "sample", "source_file", "predicted", "confidence", "proba_json"],
+    )
+
+    report: dict[str, object] = {
+        "bin_size": bin_size,
+        "protocol": protocol,
+        "length_mode": length_mode,
+        "classifier": classifier,
+        "model_path": str(model_path),
+        "predictions_path": str(prediction_path),
+    }
+    if not no_loo:
+        report["leave_one_out_report"] = leave_one_out_report(
+            items,
+            bin_size=bin_size,
+            protocol=protocol,
+            length_mode=length_mode,
+            classifier_name=classifier,
+            trim=True,
+        )
+
+    report_path = out / "signal_report.json"
+    with report_path.open("w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    report["report_path"] = str(report_path)
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build temporal-symbolic motion sequences from encrypted pcap metadata.")
+    parser.add_argument(
+        "--mode",
+        choices=["sequence", "signal", "hybrid"],
+        default="hybrid",
+        help="Run sequence pipeline, signal pipeline, or both.",
+    )
     parser.add_argument("--root", default=".", help="Dataset root containing label folders with .pcap files.")
     parser.add_argument("--out", default="outputs_motion_model", help="Output directory.")
     parser.add_argument("--window-ms", type=int, default=100, help="Aggregation window size.")
@@ -913,10 +1105,33 @@ def main():
     parser.add_argument("--task-sequences", default="", help="JSON or text file containing normal procedural action sequences.")
     parser.add_argument("--include-ports", default="", help="Comma-separated ports to keep. Empty means all ports.")
     parser.add_argument("--exclude-ports", default="22", help="Comma-separated ports to remove. Default removes SSH noise.")
+    parser.add_argument("--signal-bin-size", type=float, default=0.02, help="Signal bin size in seconds.")
+    parser.add_argument("--signal-protocol", choices=["all", "tcp", "udp"], default="all", help="Signal protocol filter.")
+    parser.add_argument("--signal-length-mode", choices=["packet", "ip", "transport", "payload"], default="packet", help="Signal length mode.")
+    parser.add_argument("--signal-classifier", choices=["rf", "xgboost"], default="rf", help="Signal classifier.")
+    parser.add_argument("--positive-ip", default="", help="Force positive direction IP for signal pipeline.")
+    parser.add_argument("--signal-no-loo", action="store_true", help="Skip signal leave-one-out evaluation.")
     args = parser.parse_args()
 
     root = Path(args.root)
     out = Path(args.out)
+    if args.mode == "signal":
+        signal_out = out / "signal_pipeline"
+        report = run_signal_pipeline(
+            root,
+            signal_out,
+            bin_size=args.signal_bin_size,
+            protocol=args.signal_protocol,
+            positive_ip=args.positive_ip or None,
+            length_mode=args.signal_length_mode,
+            classifier=args.signal_classifier,
+            no_loo=args.signal_no_loo,
+        )
+        print(f"Saved signal pipeline outputs to: {signal_out.resolve()}")
+        if report.get("leave_one_out_report"):
+            accuracy = report["leave_one_out_report"].get("accuracy")
+            print(f"Signal leave-one-out accuracy: {accuracy}")
+        return
     pcap_files = sorted(p for p in root.glob("*/*.pcap"))
     if not pcap_files:
         raise SystemExit("No .pcap files found under label folders.")
@@ -985,7 +1200,11 @@ def main():
     loo_template_scores = attach_threshold_decisions(loo_template_scores, action_thresholds)
     loo_template_acc = float(np.mean([r["loo_correct"] for r in loo_template_scores]))
     template_summary = summarize_template_scores(loo_template_scores)
-    task_sequences = load_task_sequences(args.task_sequences)
+    default_task_path = Path(__file__).with_name("database_know") / "normal_sequences.json"
+    task_sequence_path = args.task_sequences or (
+        str(default_task_path) if default_task_path.exists() else ""
+    )
+    task_sequences = load_task_sequences(task_sequence_path)
     if not task_sequences:
         task_sequences = build_default_task_sequences(sequences_by_label.keys())
     transition_scores, transition_graph, transition_edge_counts = score_task_transitions(
@@ -1054,6 +1273,27 @@ def main():
     print(f"Nearest-neighbor action accuracy: {nn_acc:.3f}")
     print(f"Leave-one-out template accuracy: {loo_template_acc:.3f}")
     print(f"\nSaved outputs to: {out.resolve()}")
+
+    if args.mode == "hybrid":
+        signal_out = out / "signal_pipeline"
+        signal_report = run_signal_pipeline(
+            root,
+            signal_out,
+            bin_size=args.signal_bin_size,
+            protocol=args.signal_protocol,
+            positive_ip=args.positive_ip or None,
+            length_mode=args.signal_length_mode,
+            classifier=args.signal_classifier,
+            no_loo=args.signal_no_loo,
+        )
+        hybrid_report = {
+            "sequence_report": str((out / "report.json").resolve()),
+            "signal_report": str(Path(signal_report["report_path"]).resolve()),
+        }
+        with open(out / "hybrid_report.json", "w", encoding="utf-8") as f:
+            json.dump(hybrid_report, f, ensure_ascii=False, indent=2)
+        print(f"Signal pipeline outputs: {signal_out.resolve()}")
+        print(f"Hybrid report: {(out / 'hybrid_report.json').resolve()}")
 
 
 def group_rows(rows):

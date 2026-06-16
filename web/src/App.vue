@@ -53,22 +53,22 @@ const errorText = (error) => {
       return field ? `${field}: ${item.msg}` : item.msg
     }).join('；')
   }
-  return detail || '操作失败，请检查输入'
+  return detail || '请求失败，请检查服务状态。'
 }
 
 const validateAuth = () => {
   if (authMode.value === 'login') {
-    if (!authForm.login.trim()) return '请输入邮箱或用户名'
-    if (!authForm.password) return '请输入密码'
+    if (!authForm.login.trim()) return '请输入用户名或邮箱。'
+    if (!authForm.password) return '请输入密码。'
     return ''
   }
-  if (!authForm.username.trim()) return '请输入用户名'
-  if (!/^[\u4e00-\u9fa5A-Za-z0-9_-]{2,32}$/.test(authForm.username.trim())) return '用户名只能包含中文、字母、数字、下划线或短横线，长度 2-32 位'
-  if (!authForm.email.trim()) return '请输入邮箱'
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authForm.email.trim())) return '邮箱格式不正确'
-  if (authForm.password.length < 8) return '密码至少需要 8 位'
-  if (!/[A-Za-z]/.test(authForm.password) || !/\d/.test(authForm.password)) return '密码需要同时包含字母和数字'
-  if (authForm.password !== authForm.confirm_password) return '两次输入的密码不一致'
+  if (!authForm.username.trim()) return '请输入用户名。'
+  if (!/^[\u4e00-\u9fa5A-Za-z0-9_-]{2,32}$/.test(authForm.username.trim())) return '用户名支持中英文、数字、下划线和短横线，长度 2-32。'
+  if (!authForm.email.trim()) return '请输入邮箱。'
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authForm.email.trim())) return '邮箱格式不正确。'
+  if (authForm.password.length < 8) return '密码至少 8 位。'
+  if (!/[A-Za-z]/.test(authForm.password) || !/\d/.test(authForm.password)) return '密码需要同时包含字母和数字。'
+  if (authForm.password !== authForm.confirm_password) return '两次输入的密码不一致。'
   return ''
 }
 
@@ -94,7 +94,7 @@ const submitAuth = async () => {
     localStorage.setItem('rss_token', data.token)
     auth.user = data.user
     authVisible.value = false
-    ElMessage.success(authMode.value === 'login' ? '登录成功' : '注册成功')
+    ElMessage.success(authMode.value === 'login' ? '已登录' : '注册完成')
   } catch (error) {
     authError.value = errorText(error)
   } finally {
@@ -119,60 +119,53 @@ onMounted(loadMe)
   <RouterView v-if="isEntry" />
 
   <div v-else class="workbench-shell">
-    <aside class="sidebar">
+    <header class="console-header">
       <RouterLink class="sidebar-brand" to="/">
         <span class="brand-mark">R</span>
         <span>
-          <strong>Robot Security</strong>
-          <small>检测工作台</small>
+          <strong>机器人安全审计</strong>
+          <small>Robot Security System</small>
         </span>
       </RouterLink>
 
       <nav class="sidebar-nav">
         <RouterLink to="/side-channel">侧信道分析</RouterLink>
         <RouterLink to="/payload">载荷检测</RouterLink>
-        <RouterLink to="/motion">运动时序建模</RouterLink>
-        <RouterLink to="/history">历史记录</RouterLink>
-        <RouterLink to="/profile">个人主页</RouterLink>
+        <RouterLink to="/motion">运动时序</RouterLink>
+        <RouterLink to="/papb">PAPB 校验</RouterLink>
+        <RouterLink to="/history">审计历史</RouterLink>
+        <RouterLink to="/profile">账户设置</RouterLink>
       </nav>
 
-      <div class="sidebar-status">
-        <span>API</span>
-        <strong>127.0.0.1:8010</strong>
+      <el-dropdown v-if="auth.user" trigger="click">
+        <button class="account-button" type="button">
+          <span class="avatar">{{ userInitial }}</span>
+          <span>{{ auth.user.display_name || auth.user.username }}</span>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item @click="router.push('/profile')">账户设置</el-dropdown-item>
+            <el-dropdown-item @click="router.push('/history')">审计历史</el-dropdown-item>
+            <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
+      <div v-else class="topbar-auth">
+        <button type="button" class="text-login" @click="authMode = 'login'; authVisible = true">登录</button>
+        <el-button type="primary" @click="authMode = 'register'; authVisible = true">注册</el-button>
       </div>
-    </aside>
+    </header>
 
     <main class="workbench-main">
-      <header class="topbar">
-        <div class="topbar-title">
-          <strong>{{ route.meta.title || '检测工作台' }}</strong>
-          <span>Robot Security System</span>
+      <div class="page-heading">
+        <div>
+          <h1>{{ route.meta.title || '机器人网络安全审计' }}</h1>
         </div>
-
-        <nav class="topbar-nav">
-          <RouterLink to="/history">历史记录</RouterLink>
-          <RouterLink to="/profile">个人主页</RouterLink>
-        </nav>
-
-        <el-dropdown v-if="auth.user" trigger="click">
-          <button class="account-button" type="button">
-            <span class="avatar">{{ userInitial }}</span>
-            <span>{{ auth.user.display_name || auth.user.username }}</span>
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="router.push('/profile')">个人主页</el-dropdown-item>
-              <el-dropdown-item @click="router.push('/history')">历史记录</el-dropdown-item>
-              <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-
-        <div v-else class="topbar-auth">
-          <button type="button" class="text-login" @click="authMode = 'login'; authVisible = true">登录</button>
-          <el-button type="primary" @click="authMode = 'register'; authVisible = true">注册</el-button>
+        <div class="sidebar-status">
+          服务在线 · <strong>127.0.0.1:8010</strong>
         </div>
-      </header>
+      </div>
 
       <RouterView />
     </main>
@@ -182,9 +175,9 @@ onMounted(loadMe)
     <div class="auth-head">
       <div>
         <h2>{{ authMode === 'login' ? '登录' : '注册' }}</h2>
-        <p>{{ authMode === 'login' ? '进入你的检测工作台' : '创建本地分析账号' }}</p>
+        <p>{{ authMode === 'login' ? '进入本地审计控制台' : '创建一个审计账户' }}</p>
       </div>
-      <button type="button" @click="authVisible = false">×</button>
+      <button type="button" aria-label="关闭" @click="authVisible = false">×</button>
     </div>
 
     <div class="auth-tabs">
@@ -194,16 +187,15 @@ onMounted(loadMe)
 
     <div v-if="authMode === 'login'" class="auth-form">
       <label class="auth-field">
-        <span>账号</span>
-        <el-input v-model="authForm.login" placeholder="邮箱或用户名" />
+        <span>用户名或邮箱</span>
+        <el-input v-model="authForm.login" placeholder="name@example.com" />
       </label>
       <label class="auth-field">
         <span>密码</span>
         <el-input v-model="authForm.password" placeholder="请输入密码" type="password" show-password />
       </label>
       <div class="auth-options">
-        <el-checkbox v-model="authForm.remember">记住我</el-checkbox>
-        <button type="button">忘记密码？</button>
+        <el-checkbox v-model="authForm.remember">保持登录</el-checkbox>
       </div>
       <p v-if="authError" class="auth-error">{{ authError }}</p>
       <el-button type="primary" :loading="authLoading" class="full-button" @click="submitAuth">登录</el-button>
@@ -212,7 +204,7 @@ onMounted(loadMe)
     <div v-else class="auth-form">
       <label class="auth-field">
         <span>用户名</span>
-        <el-input v-model="authForm.username" placeholder="支持中文、字母、数字" />
+        <el-input v-model="authForm.username" placeholder="2-32 位，中英文或数字" />
       </label>
       <label class="auth-field">
         <span>邮箱</span>
@@ -220,7 +212,7 @@ onMounted(loadMe)
       </label>
       <label class="auth-field">
         <span>密码</span>
-        <el-input v-model="authForm.password" placeholder="至少 8 位，含字母和数字" type="password" show-password />
+        <el-input v-model="authForm.password" placeholder="至少 8 位，包含字母和数字" type="password" show-password />
       </label>
       <label class="auth-field">
         <span>确认密码</span>

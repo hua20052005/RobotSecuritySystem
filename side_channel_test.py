@@ -176,6 +176,7 @@ def analyze_pcap(
     contamination: float = 0.08,
     max_points: int = 5000,
     synthetic_labels: Optional[pd.DataFrame] = None,
+    window: int = 20,
 ) -> Dict[str, object]:
     """Analyze PCAP with side-channel anomaly detection.
     
@@ -200,9 +201,12 @@ def analyze_pcap(
     
     df = df.copy()
     
-    # Compute side-channel features if not already present
+    # Compute side-channel features if not already present.
+    # Use the sliding-window variant so per-packet features stay local: timing attacks
+    # (flooding / replay / downgrade) produce a window that stands out instead of being
+    # averaged into the surrounding normal traffic of the same flow.
     if "iat_mean" not in df.columns:
-        df = compute_side_channel_features(df)
+        df = compute_side_channel_features_windowed(df, window=window)
     
     # Ensure all requested features exist
     for feat in features:
@@ -238,6 +242,8 @@ def analyze_pcap(
         "feature_list": list(features),
         "scaler": scaler,
         "model": model,
+        "contamination": float(contamination),
+        "window": int(window),
     }
 
 
@@ -351,6 +357,103 @@ def compute_side_channel_features(df: pd.DataFrame) -> pd.DataFrame:
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
     }
+
+
+def compute_side_channel_features_windowed(df: pd.DataFrame, window: int = 20) -> pd.DataFrame:
+    """Compute side-channel features over a SLIDING WINDOW per flow (streaming-style).
+
+    Why this exists: the original compute_side_channel_features() aggregates over the
+    WHOLE flow and broadcasts one feature vector to every packet of that flow. Because
+    normal traffic and the timing attacks (flooding / replay / downgrade / semantic
+    inversion) all share the same robot<->controller flow, their attack signal gets
+    averaged away by the 200 surrounding normal packets, so they all look identical and
+    only the distinct-IP "unauthorized injection" flow is ever detected.
+
+    This version instead computes each packet's features from the trailing `window`
+    packets of its own flow (a rolling window ending at the current packet). A burst of
+    flooding now produces a window with tiny IAT / high burst_intensity that stands out,
+    so the timing attacks become detectable. This also matches the report's "real-time,
+    edge-deployed, low-latency" framing better than whole-flow aggregation.
+    """
+
+    df = df.copy()
+
+    if "true_label" not in df.columns:
+        df["true_label"] = "unknown"
+
+    # Tolerate either 'time' (synthetic) or 'timestamp' (real pcap) as the time column.
+    time_col = "time" if "time" in df.columns else ("timestamp" if "timestamp" in df.columns else None)
+    if time_col is None:
+        raise ValueError("DataFrame must contain a 'time' or 'timestamp' column")
+
+    df["flow_id"] = df.apply(
+        lambda row: tuple(sorted([str(row.get("src", "")), str(row.get("dst", ""))])),
+        axis=1,
+    )
+
+    feat_names = [
+        "iat_mean", "iat_std", "iat_cv", "direction_balance",
+        "burst_intensity", "periodicity_score", "size_cv",
+    ]
+    # Pre-allocate per-packet feature columns.
+    for name in feat_names:
+        df[name] = 0.0
+
+    for flow_id, group in df.groupby("flow_id"):
+        group = group.sort_values(time_col)
+        idx_order = group.index.tolist()
+        times = group[time_col].to_numpy(dtype=float)
+        sizes = group.get("size", pd.Series([0] * len(group))).to_numpy(dtype=float)
+        directions = group.get("direction", pd.Series([""] * len(group))).astype(str).to_numpy()
+
+        for j in range(len(idx_order)):
+            lo = max(0, j - window + 1)
+            w_times = times[lo:j + 1]
+            w_sizes = sizes[lo:j + 1]
+            w_dirs = directions[lo:j + 1]
+
+            if len(w_times) > 1:
+                iats = np.diff(w_times) * 1000.0  # ms
+                iat_mean = float(np.mean(iats))
+                iat_std = float(np.std(iats))
+                iat_cv = float(iat_std / max(iat_mean, 0.001))
+                # burst: max consecutive packets spaced < 10ms inside the window
+                max_burst = cur = 1
+                for t in range(1, len(w_times)):
+                    if w_times[t] - w_times[t - 1] < 0.01:
+                        cur += 1
+                        max_burst = max(max_burst, cur)
+                    else:
+                        cur = 1
+                burst_intensity = float(max_burst)
+                if len(iats) > 1:
+                    periodicity_score = float(1.0 / (1.0 + np.mean(np.abs(np.diff(iats)))))
+                else:
+                    periodicity_score = 0.0
+            else:
+                iat_mean = iat_std = iat_cv = burst_intensity = periodicity_score = 0.0
+
+            up = int(np.sum(w_dirs == "up"))
+            down = int(np.sum(w_dirs == "down"))
+            denom = max(up + down, 1)
+            direction_balance = float((up - down) / denom)
+
+            if len(w_sizes) > 1:
+                s_mean = float(np.mean(w_sizes))
+                size_cv = float(np.std(w_sizes) / max(s_mean, 1.0))
+            else:
+                size_cv = 0.0
+
+            ridx = idx_order[j]
+            df.at[ridx, "iat_mean"] = iat_mean
+            df.at[ridx, "iat_std"] = iat_std
+            df.at[ridx, "iat_cv"] = iat_cv
+            df.at[ridx, "direction_balance"] = direction_balance
+            df.at[ridx, "burst_intensity"] = burst_intensity
+            df.at[ridx, "periodicity_score"] = periodicity_score
+            df.at[ridx, "size_cv"] = size_cv
+
+    return df
 
 
 def evaluate_detection(df: pd.DataFrame) -> Dict[str, float]:
@@ -526,7 +629,8 @@ def print_report(result: Dict[str, object], with_plots: bool = False) -> None:
     
     print(f"\n[DETECTION CONFIGURATION]")
     print(f"  Feature set: {result['feature_list']}")
-    print(f"  Model: IsolationForest (contamination=0.08)")
+    print(f"  Model: IsolationForest (contamination={result.get('contamination', 0.08):.3f}, "
+          f"sliding window={result.get('window', 20)})")
     print(f"  Total packets: {summary['total_packets']}")
     print(f"  Detected anomalies: {summary['anomalies']} ({summary['ratio']*100:.2f}%)")
     print(f"  Average anomaly score: {summary['avg_score']:.5f}\n")
@@ -663,7 +767,8 @@ We employ IsolationForest (scikit-learn) for one-class anomaly detection:
 
 Hyperparameters:
   - Algorithm: Isolation Forest (100 trees)
-  - Contamination: 0.08 (8% expected anomaly rate during training)
+  - Contamination: {result.get('contamination', 0.08):.3f} (matched to dataset anomaly prevalence)
+  - Sliding window: {result.get('window', 20)} packets per flow (streaming feature scope)
   - Random state: 42 (reproducible trials)
   - Feature standardization: StandardScaler (zero-mean, unit-variance)
 

@@ -1,0 +1,74 @@
+[
+	{
+		"scene": "startup",
+		"sequence": [0, 1]
+	},
+	{
+		"scene": "basic_patrol",
+		"sequence": [1, 2, 2, 3, 2, 1]
+	},
+	{
+		"scene": "high_speed_patrol",
+		"sequence": [1, 2, 3, 4, 3, 2, 1]
+	},
+	{
+		"scene": "backward_adjustment",
+		"sequence": [1, 2, 5, 1]
+	},
+	{
+		"scene": "interactive_demo",
+		"sequence": [1, 11, 12, 11, 1]
+	},
+	{
+		"scene": "dance_show",
+		"sequence": [1, 9, 12, 10, 9, 1]
+	},
+	{
+		"scene": "jump_training",
+		"sequence": [1, 2, 7, 1]
+	},
+	{
+		"scene": "side_jump_show",
+		"sequence": [1, 2, 6, 1]
+	},
+	{
+		"scene": "extreme_show",
+		"sequence": [1, 12, 8, 1]
+	},
+	{
+		"scene": "mixed_showcase",
+		"sequence": [0, 1, 2, 3, 11, 12, 9, 10, 1, 0]
+	},
+	{
+		"scene": "walk_and_greet",
+		"sequence": [1, 2, 2, 11, 1]
+	},
+	{
+		"scene": "dance_transition",
+		"sequence": [1, 9, 10, 12, 9, 1]
+	},
+	{
+		"scene": "slow_jump_combo",
+		"sequence": [1, 2, 7, 12, 1]
+	},
+	{
+		"scene": "motion_recovery",
+		"sequence": [1, 2, 3, 2, 1, 0]
+	},
+	{
+		"scene": "performance_mode",
+		"sequence": [1, 11, 9, 10, 12, 11, 1]
+	},
+	{
+		"scene": "patrol_and_demo",
+		"sequence": [1, 2, 3, 2, 11, 1]
+	},
+	{
+		"scene": "agility_demo",
+		"sequence": [1, 2, 6, 7, 1]
+	},
+	{
+		"scene": "full_performance",
+		"sequence": [0, 1, 2, 3, 4, 3, 2, 11, 12, 9, 10, 8, 1, 0]
+	}
+]

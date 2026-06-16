@@ -1,31 +1,79 @@
-# 忽略 Python 自动生成的缓存文件
+# ============================================================
+#  Python
+# ============================================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
 
-# 忽略环境配置和开发工具的隐藏文件夹
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# ============================================================
+#  密钥 / 环境配置（绝不上传！）
+# ============================================================
+.env
+.env.*
+*.key
+secrets.*
+
+# ============================================================
+#  开发工具 / 编辑器
+# ============================================================
 .vscode/
 .idea/
-.env
-venv/
+.DS_Store
+Thumbs.db
 
-# 忽略运动识别训练数据（PCAP 文件过大）
+# ============================================================
+#  前端（Node / Vite）
+# ============================================================
+node_modules/
+web/dist/
+web/.vite/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# 项目副本 / 备份目录（不要上传整份拷贝）
+web - 副本/
+*副本*/
+*_backup/
+*.bak
+
+# ============================================================
+#  数据文件（大文件 / 抓包 / 数据库）
+# ============================================================
+*.pcap
+*.pcapng
+*.db
+*.sqlite
+*.sqlite3
+*.zip
+
+data/api_runs/
+payload-detection/data/datasets/
+payload-detection/data/api_runs/
+core/api_runs/
+backend/api_runs/
+
+# ============================================================
+#  运动识别训练数据 & 模型输出（PCAP 过大 / 临时产物）
+# ============================================================
 motion/motion/hello/
 motion/motion/jump/
 motion/motion/step/
 motion/motion/walk/
-
-# 忽略运动识别模型输出（临时文件）
 motion/motion/outputs_motion_model*/
 motion/motion/scapy/
-
-# 忽略 data 目录下的大型 PCAP 文件（保留必要的测试数据可按需修改）
-data/*.pcap
-data/*.pcapng
-data/api_runs/*.pcapng
-
-# 忽略各检测模块的 API 运行输出数据（这些都是临时结果和大文件）
 motion/motion/api_runs/
-payload-detection/data/api_runs/
-core/api_runs/
-backend/api_runs/
+
+# ============================================================
+#  运行产物 / 日志 / 临时结果
+# ============================================================
+*.log
+results_windowed/

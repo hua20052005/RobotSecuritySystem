@@ -1,0 +1,87 @@
+flowchart TB
+    Core(["至核心交换域"])
+
+    subgraph EXIT["① 出口防护层"]
+        direction LR
+        FW["接入区防火墙<br/>下一代防火墙 · 区域边界"]
+        subgraph SOC["安全管理中心（联动管理）"]
+            direction TB
+            TopSA["TopSA<br/>态势感知平台"]
+            TopAudit["TopAudit<br/>日志审计系统（唯一）"]
+            TopSAG["TopSAG<br/>运维堡垒机"]
+        end
+    end
+
+    subgraph CTRL["② 网络控制层"]
+        direction LR
+        AC["无线控制器 AC<br/>集中管控·策略下发<br/>数据主干 · CAPWAP"]
+        NAC["NAC 终端准入<br/>802.1X·合规检查·动态授权<br/>—旁挂—"]
+        WIDS["WIDS/WIPS 无线入侵检测防御<br/>非法AP·钓鱼AP·攻击检测<br/>—旁路—"]
+        RADIUS["RADIUS / AD 服务器<br/>认证源"]
+    end
+
+    subgraph ACCESS["③ 接入层（PoE 供电）"]
+        direction LR
+        SW1["PoE接入交换机1"]
+        SW2["PoE接入交换机2"]
+        SWN["PoE接入交换机N"]
+    end
+
+    subgraph APS["无线 AP（CAPWAP 关联至 AC）"]
+        direction LR
+        AP1(["AP"])
+        AP2(["AP"])
+        AP3(["AP"])
+        APN(["AP"])
+    end
+
+    subgraph TERM["④ 终端层（无线终端）"]
+        direction LR
+        EP["无线终端（安装安全客户端 TopEDR/TopIHS）<br/>杀毒·行为监测·外设管控·补丁·资产管理"]
+    end
+
+    %% ===== 数据主干（实线） =====
+    Core <==>|数据主干| FW
+    FW <==>|数据主干| AC
+    AC ==> SW1
+    AC ==> SW2
+    AC ==> SWN
+    SW1 -. "PoE供电+上联" .-> AP1
+    SW1 -. PoE .-> AP2
+    SW2 -. PoE .-> AP3
+    SWN -. PoE .-> APN
+    AP1 -. 无线关联 .-> EP
+    AP2 -. 无线 .-> EP
+    AP3 -. 无线 .-> EP
+    APN -. 无线 .-> EP
+
+    %% ===== 旁挂 / 管理面（虚线） =====
+    AC -. 旁挂 .- NAC
+    AC -. 旁挂 .- WIDS
+    NAC -. "认证转发 802.1X" .-> RADIUS
+
+    %% ===== WIDS/WIPS 射频采集 =====
+    WIDS -. 射频数据采集 .- AC
+    AP1 -. 射频监测上报 .- WIDS
+
+    %% ===== 802.1X 认证链路（终端→AP→AC→NAC→RADIUS） =====
+    EP -. "802.1X认证请求" .- AC
+    AC -. 准入校验 .- NAC
+
+    %% ===== 安全管理中心联动（日志/告警上报·策略联动） =====
+    FW <==>|"日志/告警·策略联动"| SOC
+    AC -. 日志上报 .-> TopAudit
+    NAC -. 日志上报 .-> TopAudit
+    WIDS -. 告警上报 .-> TopSA
+
+    classDef exitL fill:#FEE2E2,stroke:#DC2626,stroke-width:2px,color:#111;
+    classDef ctrlL fill:#DBEAFE,stroke:#2563EB,stroke-width:2px,color:#111;
+    classDef accL fill:#EDE9FE,stroke:#7C3AED,stroke-width:2px,color:#111;
+    classDef termL fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:#111;
+    classDef soc fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#111;
+
+    class FW exitL;
+    class AC,NAC,WIDS,RADIUS ctrlL;
+    class SW1,SW2,SWN,AP1,AP2,AP3,APN accL;
+    class EP termL;
+    class TopSA,TopAudit,TopSAG soc;
