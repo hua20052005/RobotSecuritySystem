@@ -131,7 +131,7 @@ onMounted(loadMe)
       <nav class="sidebar-nav">
         <RouterLink to="/side-channel">侧信道分析</RouterLink>
         <RouterLink to="/payload">载荷检测</RouterLink>
-        <RouterLink to="/motion">运动时序</RouterLink>
+        <RouterLink to="/motion">动作序列</RouterLink>
         <RouterLink to="/papb">PAPB 校验</RouterLink>
         <RouterLink to="/history">审计历史</RouterLink>
         <RouterLink to="/profile">账户设置</RouterLink>

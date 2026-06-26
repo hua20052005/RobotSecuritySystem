@@ -3,125 +3,104 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
-import MarkdownReport from '../components/MarkdownReport.vue'
 import MetricCard from '../components/MetricCard.vue'
 
-const windowMs = ref(100)
-const clusters = ref(8)
-const maxTemplates = ref(2)
-const minSupport = ref(2)
-const diversity = ref(0.85)
-const taskSequences = ref('task_sequences_example.json')
-const includePorts = ref('')
-const excludePorts = ref('22')
+const fileList = ref([])
+const selectedFile = ref(null)
 const loading = ref(false)
-const reportLoading = ref(false)
 const result = ref(null)
-const aiReport = ref('')
-const reportDialogVisible = ref(false)
 
-const joinUrl = (base, path) => {
-  const cleanBase = base?.replace(/\/$/, '') || ''
-  return `${cleanBase}${path}`
+const method = ref('dp')
+const minSegmentS = ref(0.25)
+const stepS = ref(0.5)
+const segmentPenalty = ref(0.02)
+const transcript = ref('')
+const validateFlow = ref(true)
+
+const actions = computed(() => result.value?.actions || [])
+const flow = computed(() => result.value?.flow_validation || null)
+const violations = computed(() => flow.value?.violations || [])
+const segments = computed(() => result.value?.recognition?.actions || [])
+const transitions = computed(() => flow.value?.transition_check?.transitions || [])
+const candidates = computed(() => flow.value?.candidate_matches || [])
+
+const status = computed(() => result.value?.summary?.flow_status || 'NOT_RUN')
+const statusMeta = computed(() => {
+  if (status.value === 'ANOMALY') return { type: 'danger', text: '异常', explain: '动作序列违反当前流程模型或出现未见过的动作转移。' }
+  if (status.value === 'UNKNOWN_VALIDITY') return { type: 'warning', text: '未知', explain: '没有命中正常模板，但也未触发明确的硬规则异常。' }
+  if (status.value === 'NORMAL_WITH_TOLERANCE') return { type: 'primary', text: '容错正常', explain: '动作序列与正常模板接近，偏差在容忍范围内。' }
+  if (status.value === 'NORMAL') return { type: 'success', text: '正常', explain: '动作序列通过当前流程模型校验。' }
+  return { type: 'info', text: '未校验', explain: '尚未执行流程校验，或没有识别到可校验的动作。' }
+})
+const mainReason = computed(() => violations.value[0]?.reason || statusMeta.value.explain)
+const rawJson = computed(() => (result.value ? JSON.stringify(result.value, null, 2) : ''))
+
+const handleFileChange = (file) => {
+  selectedFile.value = file.raw
+  fileList.value = [file]
 }
 
-const downloadImage = computed(() => {
-  if (!result.value?.download_image_url) return ''
-  return joinUrl(api.defaults.baseURL, result.value.download_image_url)
-})
-
-const downloadMarkdown = computed(() => {
-  if (!result.value?.download_markdown_url) return ''
-  return joinUrl(api.defaults.baseURL, result.value.download_markdown_url)
-})
-
-const downloadTransitions = computed(() => {
-  if (!result.value?.download_transitions_url) return ''
-  return joinUrl(api.defaults.baseURL, result.value.download_transitions_url)
-})
-
-const consistencyRows = computed(() => {
-  const scores = result.value?.temporal_consistency_score || {}
-  return Object.entries(scores).map(([label, score]) => ({
-    label,
-    score: Number(score),
-  }))
-})
-
-const downloadText = (filename, text) => {
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
+const handleRemove = () => {
+  selectedFile.value = null
+  fileList.value = []
 }
 
-const runAnalysis = async () => {
+const errorText = (error) => {
+  const detail = error.response?.data?.detail
+  if (Array.isArray(detail)) return detail.map((item) => item.msg).join('；')
+  if (typeof detail === 'string') return detail
+  if (detail?.message) return detail.message
+  if (error.code === 'ERR_NETWORK') return '无法连接后端服务，请先启动 127.0.0.1:8010。'
+  return '动作序列识别失败，请检查后端服务、模型文件和上传的 pcap。'
+}
+
+const runRecognition = async () => {
+  if (!selectedFile.value) {
+    ElMessage.warning('请先上传 .pcap / .pcapng / .cap 文件')
+    return
+  }
+
   loading.value = true
   result.value = null
-  aiReport.value = ''
 
   const formData = new FormData()
-  formData.append('window_ms', windowMs.value.toString())
-  formData.append('clusters', clusters.value.toString())
-  formData.append('max_templates_per_action', maxTemplates.value.toString())
-  formData.append('min_template_support', minSupport.value.toString())
-  formData.append('template_diversity_threshold', diversity.value.toString())
-  formData.append('task_sequences', taskSequences.value.trim())
-  formData.append('include_ports', includePorts.value.trim())
-  formData.append('exclude_ports', excludePorts.value.trim())
+  formData.append('file', selectedFile.value)
+  formData.append('mode', 'sequence')
+  formData.append('method', method.value)
+  formData.append('validate_flow', validateFlow.value ? 'true' : 'false')
+  formData.append('min_segment_s', String(minSegmentS.value))
+  formData.append('step_s', String(stepS.value))
+  formData.append('segment_penalty', String(segmentPenalty.value))
+  if (transcript.value.trim()) {
+    formData.append('transcript', transcript.value.trim())
+  }
 
   try {
-    const { data } = await api.post('/api/motion/analyze', formData, {
+    const { data } = await api.post('/api/motion-recognition/recognize', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     result.value = data
+    if (data.summary?.flow_status === 'ANOMALY') {
+      ElMessage.error('识别完成：检测到动作流程异常')
+    } else {
+      ElMessage.success('动作序列识别完成')
+    }
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail?.message || error.response?.data?.detail || '运动时序建模失败，请检查后端日志。')
+    ElMessage.error(errorText(error))
   } finally {
     loading.value = false
   }
 }
 
-const buildEvidence = () => {
-  if (!result.value) return {}
-  return {
-    scene: 'motion_temporal_modeling',
-    parameters: {
-      window_ms: windowMs.value,
-      clusters: clusters.value,
-      max_templates_per_action: maxTemplates.value,
-      min_template_support: minSupport.value,
-      template_diversity_threshold: diversity.value,
-      task_sequences: taskSequences.value || null,
-      include_ports: includePorts.value || null,
-      exclude_ports: excludePorts.value || null,
-    },
-    summary: result.value.summary,
-    temporal_consistency_score: result.value.temporal_consistency_score,
-    template_summary: result.value.template_summary,
-    transition_preview: result.value.transition_preview?.slice(0, 20) || [],
-  }
-}
-
-const generateReport = async () => {
+const downloadJson = () => {
   if (!result.value) return
-  reportLoading.value = true
-  try {
-    const { data } = await api.post('/api/reports/generate', {
-      scene: '运动时序建模',
-      task_id: result.value.run_id || '',
-      evidence: buildEvidence(),
-    })
-    aiReport.value = data.report || ''
-    reportDialogVisible.value = true
-  } catch (error) {
-    ElMessage.error(error.response?.data?.detail || 'AI 报告生成失败，请检查后端配置。')
-  } finally {
-    reportLoading.value = false
-  }
+  const blob = new Blob([rawJson.value], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${result.value.run_id || 'motion_sequence'}_result.json`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 </script>
 
@@ -129,163 +108,213 @@ const generateReport = async () => {
   <section class="panel fade-in">
     <div class="section-header">
       <div>
-        <h2 class="section-title">运动时序建模</h2>
-        <p class="panel-sub">基于动作 PCAP 样本构建符号序列模板，评估动作一致性、可分性与任务转移异常。</p>
+        <h2 class="section-title">动作序列识别与异常分析</h2>
+        <p class="panel-sub">
+          上传机器狗通信 pcap，系统先从流量中识别动作序列，再把动作序列送入流程模型，判断是否存在异常动作转移。
+        </p>
       </div>
+      <el-tag v-if="result" :type="statusMeta.type" size="large">{{ statusMeta.text }}</el-tag>
     </div>
 
-    <div class="grid-3" style="margin-top: 20px;">
-      <div>
-        <p class="panel-sub">时间窗口 ms</p>
-        <el-input-number v-model="windowMs" :min="20" :max="5000" :step="20" />
+    <div class="analysis-input-grid">
+      <div class="upload-zone">
+        <p class="panel-sub">pcap 文件</p>
+        <el-upload
+          drag
+          :auto-upload="false"
+          :limit="1"
+          :file-list="fileList"
+          :on-change="handleFileChange"
+          :on-remove="handleRemove"
+          accept=".pcap,.pcapng,.cap"
+        >
+          <div class="el-upload__text">拖拽 PCAP/PCAPNG/CAP 到此处，或点击选择</div>
+        </el-upload>
       </div>
-      <div>
-        <p class="panel-sub">符号聚类数</p>
-        <el-input-number v-model="clusters" :min="2" :max="26" :step="1" />
-      </div>
-      <div>
-        <p class="panel-sub">每动作模板数</p>
-        <el-input-number v-model="maxTemplates" :min="1" :max="8" :step="1" />
-      </div>
-      <div>
-        <p class="panel-sub">最小模板支持</p>
-        <el-input-number v-model="minSupport" :min="1" :max="20" :step="1" />
-      </div>
-      <div>
-        <p class="panel-sub">模板多样性阈值</p>
-        <el-slider v-model="diversity" :min="0.5" :max="0.99" :step="0.01" />
-      </div>
-      <div>
-        <p class="panel-sub">任务序列文件</p>
-        <el-input v-model="taskSequences" placeholder="task_sequences_example.json" />
-      </div>
-    </div>
 
-    <div class="grid-2" style="margin-top: 18px;">
-      <div>
-        <p class="panel-sub">保留端口（可选）</p>
-        <el-input v-model="includePorts" placeholder="例如 1883,8883" />
-      </div>
-      <div>
-        <p class="panel-sub">排除端口</p>
-        <el-input v-model="excludePorts" placeholder="默认 22" />
-      </div>
-    </div>
+      <div class="control-stack">
+        <div class="grid-3">
+          <label class="control-field">
+            <span>识别方法</span>
+            <el-select v-model="method">
+              <el-option label="DP 动态规划" value="dp" />
+              <el-option label="活动片段" value="activity" />
+              <el-option label="滑窗扫描" value="scan" />
+            </el-select>
+          </label>
+          <label class="control-field">
+            <span>最短片段 s</span>
+            <el-input-number v-model="minSegmentS" :min="0.05" :max="10" :step="0.05" />
+          </label>
+          <label class="control-field">
+            <span>扫描步长 s</span>
+            <el-input-number v-model="stepS" :min="0.05" :max="10" :step="0.05" />
+          </label>
+        </div>
 
-    <div class="action-row" style="margin-top: 20px;">
-      <el-button type="primary" :loading="loading" @click="runAnalysis">开始时序建模</el-button>
-      <span class="pill-badge">默认读取 motion/motion 下的动作样本</span>
+        <div class="grid-2">
+          <label class="control-field">
+            <span>切分惩罚</span>
+            <el-input-number v-model="segmentPenalty" :min="0" :max="1" :step="0.01" />
+          </label>
+          <label class="control-field">
+            <span>流程校验</span>
+            <el-switch v-model="validateFlow" active-text="开启" inactive-text="关闭" />
+          </label>
+        </div>
+
+        <label class="control-field">
+          <span>人工参考序列，可选</span>
+          <el-input v-model="transcript" placeholder="stand -> hello -> step -> backflip" />
+        </label>
+
+        <div class="action-row">
+          <el-button type="primary" :loading="loading" @click="runRecognition">开始识别与分析</el-button>
+          <el-button :disabled="!result" @click="downloadJson">导出 JSON</el-button>
+          <span class="pill-badge">第三模块：动作识别 + 时序异常分析</span>
+        </div>
+      </div>
     </div>
   </section>
 
   <section v-if="result" class="panel fade-in">
     <div class="section-header">
-      <h2 class="section-title">模型指标</h2>
-      <el-button :loading="reportLoading" @click="generateReport">生成 AI 报告</el-button>
+      <div>
+        <h2 class="section-title">最终判断</h2>
+        <p class="panel-sub">{{ mainReason }}</p>
+      </div>
+      <span class="pill-badge">run_id: {{ result.run_id }}</span>
     </div>
+
     <div class="grid-3" style="margin-top: 18px;">
-      <MetricCard
-        title="动作数量"
-        :value="String(result.summary.action_count || 0)"
-        subtitle="参与建模的动作类别"
-      />
-      <MetricCard
-        title="最近邻准确率"
-        :value="(Number(result.summary.nearest_neighbor_accuracy || 0) * 100).toFixed(2) + '%'"
-        subtitle="动作序列可识别性"
-      />
-      <MetricCard
-        title="模板留一准确率"
-        :value="(Number(result.summary.leave_one_out_template_accuracy || 0) * 100).toFixed(2) + '%'"
-        subtitle="模板泛化表现"
-      />
-      <MetricCard
-        title="类内相似度"
-        :value="Number(result.summary.mean_within_action_similarity || 0).toFixed(4)"
-        subtitle="同动作稳定性"
-      />
-      <MetricCard
-        title="类间相似度"
-        :value="Number(result.summary.mean_between_action_similarity || 0).toFixed(4)"
-        subtitle="不同动作混淆度"
-      />
-      <MetricCard
-        title="可分性"
-        :value="Number(result.summary.separability_score || 0).toFixed(4)"
-        subtitle="类内减类间"
-      />
+      <MetricCard title="识别动作数" :value="String(actions.length)" subtitle="从 pcap 中识别出的动作标签" />
+      <MetricCard title="流程状态" :value="statusMeta.text" subtitle="PAPB 动作转移校验结果" />
+      <MetricCard title="异常条目" :value="String(violations.length)" subtitle="违反流程或模板的位置数量" />
+    </div>
+
+    <div class="motion-sequence-path">
+      <template v-if="actions.length">
+        <span v-for="(action, index) in actions" :key="`${action}-${index}`">{{ action }}</span>
+      </template>
+      <span v-else>未识别到动作</span>
     </div>
   </section>
 
   <section v-if="result" class="grid-2 fade-in">
-    <div class="chart-card">
-      <div class="chart-title">符号动作序列</div>
-      <img v-if="downloadImage" :src="downloadImage" class="motion-image" alt="symbol sequences" />
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">动作一致性</div>
-      <div class="data-table">
-        <el-table :data="consistencyRows" height="260" stripe>
-          <el-table-column prop="label" label="动作" />
-          <el-table-column prop="score" label="一致性分数">
-            <template #default="{ row }">{{ row.score.toFixed(4) }}</template>
+    <div class="panel">
+      <div class="section-header">
+        <h2 class="section-title">识别片段</h2>
+        <span class="pill-badge">{{ segments.length }} 段</span>
+      </div>
+      <div class="data-table" style="margin-top: 14px;">
+        <el-table :data="segments" height="280" stripe empty-text="暂无片段明细">
+          <el-table-column prop="label" label="动作" min-width="110" />
+          <el-table-column label="开始 s" width="100">
+            <template #default="{ row }">{{ Number(row.start_s || 0).toFixed(2) }}</template>
           </el-table-column>
+          <el-table-column label="结束 s" width="100">
+            <template #default="{ row }">{{ Number(row.end_s || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="分数" width="100">
+            <template #default="{ row }">{{ Number(row.score || row.confidence || 0).toFixed(3) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-header">
+        <h2 class="section-title">异常原因</h2>
+        <span class="pill-badge" :class="{ 'badge-danger': violations.length }">{{ violations.length }} 条</span>
+      </div>
+      <div class="data-table" style="margin-top: 14px;">
+        <el-table :data="violations" height="280" stripe empty-text="暂无异常原因">
+          <el-table-column prop="index" label="位置" width="72" />
+          <el-table-column prop="previous" label="前一动作" min-width="110" />
+          <el-table-column prop="actual" label="实际动作" min-width="110" />
+          <el-table-column prop="reason" label="原因" min-width="240" show-overflow-tooltip />
         </el-table>
       </div>
     </div>
   </section>
 
-  <section v-if="result" class="panel fade-in">
+  <section v-if="transitions.length" class="panel fade-in">
     <div class="section-header">
-      <h2 class="section-title">模板风险摘要</h2>
-      <div class="action-row">
-        <el-button v-if="downloadMarkdown" tag="a" :href="downloadMarkdown" target="_blank">下载建模报告</el-button>
-        <el-button v-if="downloadTransitions" tag="a" :href="downloadTransitions" target="_blank">下载转移分数</el-button>
-      </div>
+      <h2 class="section-title">动作转移风险</h2>
+      <span class="pill-badge">最高风险 {{ Number(flow?.transition_check?.max_risk || 0).toFixed(2) }}</span>
     </div>
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="result.template_summary" height="300" stripe>
-        <el-table-column prop="label" label="动作" min-width="120" />
-        <el-table-column prop="mean_anomaly_score" label="平均异常分" min-width="140" />
-        <el-table-column prop="max_anomaly_score" label="最高异常分" min-width="140" />
-        <el-table-column prop="mean_margin_vs_other" label="类间边际" min-width="140" />
-        <el-table-column prop="template_accuracy" label="模板准确率" min-width="140" />
+    <div class="data-table" style="margin-top: 14px;">
+      <el-table :data="transitions" height="300" stripe>
+        <el-table-column prop="index" label="步" width="72" />
+        <el-table-column label="转移" min-width="220">
+          <template #default="{ row }">{{ row.previous }} -> {{ row.actual }}</template>
+        </el-table-column>
+        <el-table-column prop="level" label="等级" width="110" />
+        <el-table-column label="概率" width="110">
+          <template #default="{ row }">{{ Number(row.probability || 0).toFixed(3) }}</template>
+        </el-table-column>
+        <el-table-column label="风险" width="110">
+          <template #default="{ row }">{{ Number(row.risk || 0).toFixed(3) }}</template>
+        </el-table-column>
+      </el-table>
+    </div>
+  </section>
+
+  <section v-if="candidates.length" class="panel fade-in">
+    <div class="section-header">
+      <h2 class="section-title">最接近的正常模板</h2>
+      <span class="pill-badge">Top {{ candidates.length }}</span>
+    </div>
+    <div class="data-table" style="margin-top: 14px;">
+      <el-table :data="candidates" height="260" stripe>
+        <el-table-column prop="template_index" label="模板" width="90" />
+        <el-table-column prop="edit_distance" label="编辑距离" width="110" />
+        <el-table-column label="错误比例" width="110">
+          <template #default="{ row }">{{ Number(row.error_ratio || 0).toFixed(3) }}</template>
+        </el-table-column>
+        <el-table-column label="模板序列" min-width="320" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.template?.join(' -> ') }}</template>
+        </el-table-column>
       </el-table>
     </div>
   </section>
 
   <section v-if="result" class="panel fade-in">
     <div class="section-header">
-      <h2 class="section-title">任务转移预览</h2>
-      <span class="pill-badge">异常转移 {{ result.summary.invalid_transition_count || 0 }} 条</span>
+      <h2 class="section-title">完整返回</h2>
+      <span class="pill-badge">用于调试、复现实验和写论文表格</span>
     </div>
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="result.transition_preview" height="320" stripe>
-        <el-table-column
-          v-for="col in Object.keys(result.transition_preview?.[0] || {})"
-          :key="col"
-          :prop="col"
-          :label="col"
-          min-width="150"
-          show-overflow-tooltip
-        />
-      </el-table>
-    </div>
+    <pre class="json-preview" style="margin-top: 14px;">{{ rawJson }}</pre>
   </section>
 
-  <section v-else-if="!result" class="empty-state fade-in">
-    点击开始时序建模后展示动作模板、转移分数和异常摘要。
+  <section v-else class="empty-state fade-in">
+    上传一段动作序列 pcap 后，这里会输出识别动作、流程异常判断和可导出的结构化证据。
   </section>
-
-  <el-dialog v-model="reportDialogVisible" title="AI 检测报告" width="760px">
-    <MarkdownReport :content="aiReport" />
-    <template #footer>
-      <div class="action-row">
-        <el-button @click="reportDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="downloadText('motion_ai_report.md', aiReport)">
-          下载报告
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
 </template>
+
+<style scoped>
+.motion-sequence-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.motion-sequence-path span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #9bbcf7;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+</style>

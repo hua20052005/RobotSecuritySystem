@@ -17,8 +17,8 @@ const modules = [
     path: '/payload',
   },
   {
-    title: '运动时序建模',
-    text: '按窗口聚合机器人控制流量，检查动作模板、相似度和时序一致性。',
+    title: '动作序列识别与异常分析',
+    text: '上传机器狗通信 PCAP，识别动作序列并判断动作转移是否异常。',
     path: '/motion',
   },
   {

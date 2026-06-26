@@ -18,7 +18,7 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/side-channel', name: 'side-channel', component: SideChannelView, meta: { title: '侧信道流量分析' } },
     { path: '/payload', name: 'payload', component: PayloadView, meta: { title: '通信载荷检测' } },
-    { path: '/motion', name: 'motion', component: MotionView, meta: { title: '运动时序建模' } },
+    { path: '/motion', name: 'motion', component: MotionView, meta: { title: '动作序列识别与异常分析' } },
     { path: '/papb', name: 'papb', component: PapbView, meta: { title: 'PAPB 流程校验' } },
     { path: '/history', name: 'history', component: HistoryView, meta: { title: '审计历史', requiresAuth: true } },
     { path: '/profile', name: 'profile', component: ProfileView, meta: { title: '账户设置', requiresAuth: true } },
