@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import echarts from '../lib/echarts'
 import { ElMessage } from 'element-plus'
 
@@ -20,10 +20,29 @@ const reportLoading = ref(false)
 const aiReport = ref('')
 const reportDialogVisible = ref(false)
 
+const summary = computed(() => result.value?.summary || { total: 0, abnormal: 0, ratio: 0, avg_score: 0 })
+const anomalyTable = computed(() => result.value?.anomalies || { columns: [], rows: [], total: 0, limit: 0 })
+const targetHitsTable = computed(() => result.value?.target_hits || { columns: [], rows: [], total: 0, limit: 0 })
+const ipProfilesTable = computed(() => result.value?.ip_port_profiles || { columns: [], rows: [], total: 0 })
+const portProfilesTable = computed(() => result.value?.port_profiles || { columns: [], rows: [], total: 0 })
+const publicLookupRows = computed(() => (ipProfilesTable.value.rows || []).filter((row) => row.scope === 'public'))
+
 const scatterRef = ref(null)
 const histRef = ref(null)
 let scatterChart = null
 let histChart = null
+
+const publicLookupLoading = ref(false)
+const publicLookupVisible = ref(false)
+const publicLookupTable = ref({ columns: [], rows: [], total: 0, lookup: { queried: 0, limit: 0, error: null } })
+
+// 二次判断（规则 + LLM 分组研判）：把异常候选按 源→目的 聚合，规则定一批，剩下交 LLM 一次研判
+const judgeLoading = ref(false)
+const judgeResult = ref(null)
+const judgeSummary = computed(() => judgeResult.value?.summary || null)
+const judgeMeta = computed(() => judgeResult.value?.llm || null)
+const judgeGroups = computed(() => judgeResult.value?.groups || [])
+const verdictSourceLabel = { rule: '规则', llm: 'AI', default: '待复核' }
 
 const featureOrder = ['dst_ip_num', 'port', 'size', 'entropy', 'src_ip_num', 'interval']
 const featureLabelMap = {
@@ -53,22 +72,26 @@ const profileColumnLabelMap = {
   ip: 'IP 地址',
   ip_long: 'IP Long',
   scope: '地址类型',
+  count: '出现次数',
   observed_as_src: '源包数',
   observed_as_dst: '目的包数',
   ports: '端口',
-  services: '端口服务',
   ptr: '反向域名',
   best_location: '高精归属地定位',
   ip_api_location: '归属地(ip-api)',
   ipwhois_location: '归属地(ipwho.is)',
-  ip2region_location: '归属地(IP2REGION)',
-  geolite2_location: '归属地(GeoLite2)',
-  dbip_location: '归属地(DbIp)',
   isp: '运营商/ISP',
   org: '归属组织',
   asn: 'ASN',
   risk_tags: '风险标签',
   lookup_status: '查询状态',
+}
+const portColumnLabelMap = {
+  port: '端口',
+  service: '服务',
+  count: '出现次数',
+  src_ips: '源 IP',
+  dst_ips: '目的 IP',
 }
 const fallbackFeatures = featureOrder.map((key) => ({ key, label: featureLabelMap[key] || key }))
 const fallbackDefaults = ['size', 'interval', 'port']
@@ -76,6 +99,7 @@ const fallbackDefaults = ['size', 'interval', 'port']
 const featureLabel = (key) => featureLabelMap[key] || key
 const columnLabel = (key) => columnLabelMap[key] || key
 const profileColumnLabel = (key) => profileColumnLabelMap[key] || key
+const portColumnLabel = (key) => portColumnLabelMap[key] || key
 
 const downloadText = (filename, text) => {
   const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
@@ -114,62 +138,147 @@ const handleRemove = () => {
   fileList.value = []
 }
 
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const normalizeScatterPoints = (points) => {
+  if (!Array.isArray(points)) return []
+  return points
+    .map((item) => {
+      if (!Array.isArray(item) || item.length < 3) return null
+      const x = toNumber(item[0], NaN)
+      const y = toNumber(item[1], NaN)
+      const score = toNumber(item[2], NaN)
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(score)) return null
+      return [x, y, score]
+    })
+    .filter(Boolean)
+}
+
+const normalizeHistogram = (histogram) => {
+  const bins = Array.isArray(histogram?.bins) ? histogram.bins.map((value) => toNumber(value, 0)) : []
+  const counts = Array.isArray(histogram?.counts) ? histogram.counts.map((value) => toNumber(value, 0)) : []
+  return { bins, counts }
+}
+
+const openPublicLookup = async () => {
+  if (!publicLookupRows.value.length) {
+    ElMessage.warning('当前没有可查询的公网 IP。')
+    return
+  }
+
+  publicLookupLoading.value = true
+  try {
+    const { data } = await api.post('/api/side-channel/public-lookup', {
+      items: publicLookupRows.value,
+    })
+    publicLookupTable.value = data
+    publicLookupVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '公网归属地查询失败。')
+  } finally {
+    publicLookupLoading.value = false
+  }
+}
+
+const runJudge = async () => {
+  const rows = anomalyTable.value.rows || []
+  if (!rows.length) {
+    ElMessage.warning('当前没有异常包可供二次判断。')
+    return
+  }
+
+  judgeLoading.value = true
+  try {
+    const { data } = await api.post('/api/side-channel/judge', {
+      candidates: rows,
+      target_ip: targetIp.value.trim() || null,
+      scene: '机器人侧信道流量异常二次判断',
+      use_llm: true,
+    })
+    judgeResult.value = data
+    const s = data.summary || {}
+    ElMessage.success(
+      `二次判断完成：${s.total_groups || 0} 个分组中确认风险 ${s.risk_groups || 0} 组、排除误报 ${s.benign_groups || 0} 组。`,
+    )
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '二次判断失败，请检查后端日志。')
+  } finally {
+    judgeLoading.value = false
+  }
+}
+
 const renderCharts = () => {
   if (!result.value) return
 
-  if (scatterRef.value && !scatterChart) scatterChart = echarts.init(scatterRef.value)
-  if (histRef.value && !histChart) histChart = echarts.init(histRef.value)
+  const scatterData = normalizeScatterPoints(result.value.scatter?.points)
+  const histogramData = normalizeHistogram(result.value.histogram)
 
-  if (scatterChart) {
-    const points = result.value.scatter?.points || []
-    const scores = points.map((item) => item[2]).filter((item) => typeof item === 'number')
-    const minScore = scores.length ? Math.min(...scores) : -0.3
-    const maxScore = scores.length ? Math.max(...scores) : 0.3
+  try {
+    if (scatterRef.value && !scatterChart) scatterChart = echarts.init(scatterRef.value)
+    if (histRef.value && !histChart) histChart = echarts.init(histRef.value)
 
-    scatterChart.setOption({
-      tooltip: { trigger: 'item' },
-      grid: { left: 54, right: 72, top: 26, bottom: 52 },
-      xAxis: {
-        name: featureLabel(result.value.features?.x || 'x'),
-        nameLocation: 'middle',
-        nameGap: 32,
-        axisLabel: { color: '#657589' },
-        splitLine: { lineStyle: { color: '#e2eaf1' } },
-      },
-      yAxis: {
-        name: featureLabel(result.value.features?.y || 'y'),
-        nameLocation: 'middle',
-        nameGap: 42,
-        axisLabel: { color: '#657589' },
-        splitLine: { lineStyle: { color: '#e2eaf1' } },
-      },
-      visualMap: {
-        min: minScore,
-        max: maxScore,
-        dimension: 2,
-        orient: 'vertical',
-        right: 4,
-        top: 20,
-        inRange: { color: ['#b54708', '#0f766e'] },
-        textStyle: { color: '#657589' },
-      },
-      series: [{ type: 'scatter', data: points, symbolSize: 8, itemStyle: { opacity: 0.82 } }],
-    })
+    if (scatterChart) {
+      const scores = scatterData.map((item) => item[2]).filter((item) => Number.isFinite(item))
+      const minScore = scores.length ? Math.min(...scores) : -0.3
+      const maxScore = scores.length ? Math.max(...scores) : 0.3
+
+      scatterChart.setOption({
+        tooltip: { trigger: 'item' },
+        grid: { left: 54, right: 72, top: 26, bottom: 52 },
+        xAxis: {
+          name: featureLabel(result.value.features?.x || 'x'),
+          nameLocation: 'middle',
+          nameGap: 32,
+          axisLabel: { color: '#657589' },
+          splitLine: { lineStyle: { color: '#e2eaf1' } },
+        },
+        yAxis: {
+          name: featureLabel(result.value.features?.y || 'y'),
+          nameLocation: 'middle',
+          nameGap: 42,
+          axisLabel: { color: '#657589' },
+          splitLine: { lineStyle: { color: '#e2eaf1' } },
+        },
+        visualMap: {
+          min: minScore,
+          max: maxScore,
+          dimension: 2,
+          orient: 'vertical',
+          right: 4,
+          top: 20,
+          inRange: { color: ['#b54708', '#0f766e'] },
+          textStyle: { color: '#657589' },
+        },
+        series: [{ type: 'scatter', data: scatterData, symbolSize: 8, itemStyle: { opacity: 0.82 } }],
+      }, true)
+    }
+
+    if (histChart) {
+      histChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 44, right: 18, top: 24, bottom: 44 },
+        xAxis: {
+          type: 'category',
+          data: histogramData.bins.map((value) => value.toFixed(3)),
+          axisLabel: { color: '#657589', interval: 4 },
+        },
+        yAxis: { axisLabel: { color: '#657589' }, splitLine: { lineStyle: { color: '#e2eaf1' } } },
+        series: [{ type: 'bar', data: histogramData.counts, itemStyle: { color: '#0f766e' }, barWidth: '60%' }],
+      }, true)
+    }
+  } catch (error) {
+    // Keep UI usable when chart rendering fails due unexpected runtime data.
+    console.error('renderCharts failed:', error)
   }
 
-  if (histChart) {
-    histChart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: 44, right: 18, top: 24, bottom: 44 },
-      xAxis: {
-        type: 'category',
-        data: result.value.histogram?.bins?.map((v) => v.toFixed(3)) || [],
-        axisLabel: { color: '#657589', interval: 4 },
-      },
-      yAxis: { axisLabel: { color: '#657589' }, splitLine: { lineStyle: { color: '#e2eaf1' } } },
-      series: [{ type: 'bar', data: result.value.histogram?.counts || [], itemStyle: { color: '#0f766e' }, barWidth: '60%' }],
-    })
-  }
+  // Some layouts report 0-size on the first frame; force a second pass after paint.
+  requestAnimationFrame(() => {
+    scatterChart?.resize()
+    histChart?.resize()
+  })
 }
 
 const runAnalysis = async () => {
@@ -181,6 +290,7 @@ const runAnalysis = async () => {
   loading.value = true
   result.value = null
   aiReport.value = ''
+  judgeResult.value = null
 
   const formData = new FormData()
   formData.append('file', selectedFile.value)
@@ -218,7 +328,15 @@ const buildEvidence = () => {
     anomaly_rows: result.value.anomalies?.rows?.slice(0, 20) || [],
     target_hits: result.value.target_hits?.rows?.slice(0, 20) || [],
     ip_port_profiles: result.value.ip_port_profiles?.rows?.slice(0, 30) || [],
-    ip_lookup: result.value.ip_port_profiles?.lookup || {},
+    port_profiles: result.value.port_profiles?.rows?.slice(0, 30) || [],
+    second_pass_judgement: judgeResult.value
+      ? {
+          overall_risk: judgeResult.value.overall_risk,
+          assessment: judgeResult.value.assessment,
+          summary: judgeResult.value.summary,
+          risk_groups: (judgeResult.value.groups || []).filter((g) => g.is_risk).slice(0, 20),
+        }
+      : null,
   }
 }
 
@@ -257,6 +375,7 @@ onBeforeUnmount(() => {
 })
 
 watch(result, async () => {
+  await nextTick()
   await nextTick()
   renderCharts()
 })
@@ -327,10 +446,10 @@ watch(result, async () => {
       </div>
     </div>
     <div class="metric-strip">
-      <MetricCard title="总包数" :value="result.summary.total.toLocaleString()" subtitle="参与侧信道建模的 IP 包" />
-      <MetricCard title="异常包" :value="result.summary.abnormal.toLocaleString()" subtitle="IsolationForest 标记为异常" />
-      <MetricCard title="异常比例" :value="(result.summary.ratio * 100).toFixed(2) + '%'" subtitle="当前文件内的离群占比" />
-      <MetricCard title="平均分数" :value="Number(result.summary.avg_score || 0).toFixed(4)" subtitle="decision_function 均值" />
+      <MetricCard title="总包数" :value="summary.total.toLocaleString()" subtitle="参与侧信道建模的 IP 包" />
+      <MetricCard title="异常包" :value="summary.abnormal.toLocaleString()" subtitle="IsolationForest 标记为异常" />
+      <MetricCard title="异常比例" :value="(summary.ratio * 100).toFixed(2) + '%'" subtitle="当前文件内的离群占比" />
+      <MetricCard title="平均分数" :value="Number(summary.avg_score || 0).toFixed(4)" subtitle="decision_function 均值" />
     </div>
   </section>
 
@@ -347,18 +466,21 @@ watch(result, async () => {
 
   <section v-if="result" class="panel fade-in">
     <div class="section-header">
-      <h2 class="section-title">IP 与端口画像</h2>
-      <span class="pill-badge">
-        {{ result.ip_port_profiles?.total || 0 }} 个地址 / 查询 {{ result.ip_port_profiles?.lookup?.queried || 0 }} 个公网 IP
-      </span>
+      <div>
+        <h2 class="section-title">IP统计</h2>
+        <p class="panel-sub">默认只做本地汇总；如需公网归属地，请点击按钮单独查询。</p>
+      </div>
+      <div class="action-row">
+        <span class="pill-badge">{{ ipProfilesTable.total || 0 }} 个地址 / {{ portProfilesTable.total || 0 }} 个端口</span>
+        <el-button :loading="publicLookupLoading" :disabled="!publicLookupRows.length" @click="openPublicLookup">
+          查询公网归属地
+        </el-button>
+      </div>
     </div>
-    <p v-if="result.ip_port_profiles?.lookup?.error" class="inline-warning">
-      联网查询失败，已保留本地端口识别：{{ result.ip_port_profiles.lookup.error }}
-    </p>
     <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="result.ip_port_profiles?.rows || []" height="380" stripe>
+      <el-table :data="ipProfilesTable.rows || []" height="300" stripe>
         <el-table-column
-          v-for="col in result.ip_port_profiles?.columns || []"
+          v-for="col in ipProfilesTable.columns || []"
           :key="col"
           :prop="col"
           :label="profileColumnLabel(col)"
@@ -371,13 +493,41 @@ watch(result, async () => {
 
   <section v-if="result" class="panel fade-in">
     <div class="section-header">
-      <h2 class="section-title">异常包明细</h2>
-      <span class="pill-badge">前 {{ result.anomalies.limit }} 条</span>
+      <h2 class="section-title">端口统计</h2>
+      <span class="pill-badge">按出现次数排序</span>
     </div>
     <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="result.anomalies.rows" height="360" stripe>
+      <el-table :data="portProfilesTable.rows || []" height="300" stripe>
         <el-table-column
-          v-for="col in result.anomalies.columns"
+          v-for="col in portProfilesTable.columns || []"
+          :key="col"
+          :prop="col"
+          :label="portColumnLabel(col)"
+          min-width="140"
+          show-overflow-tooltip
+        />
+      </el-table>
+    </div>
+  </section>
+
+  <section v-if="result" class="panel fade-in">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">异常包明细</h2>
+        <p class="panel-sub">先看模型筛出的异常，再用规则与 LLM 做二次判断，尽量把误报压下去。</p>
+      </div>
+      <div class="action-row">
+        <span class="pill-badge">前 {{ result.anomalies.limit }} 条</span>
+        <el-button :loading="judgeLoading" :disabled="!anomalyTable.rows?.length" @click="runJudge">
+          二次判断
+        </el-button>
+      </div>
+    </div>
+
+    <div class="data-table" style="margin-top: 16px;">
+      <el-table :data="anomalyTable.rows || []" height="360" stripe>
+        <el-table-column
+          v-for="col in anomalyTable.columns || []"
           :key="col"
           :prop="col"
           :label="columnLabel(col)"
@@ -388,15 +538,68 @@ watch(result, async () => {
     </div>
   </section>
 
-  <section v-if="result && result.target_hits.rows.length" class="panel fade-in">
+  <section v-if="result && judgeResult" class="panel fade-in">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">二次判断结果</h2>
+        <p class="panel-sub">异常候选按「源 → 目的」聚合成分组，规则先定，剩下交 LLM 一次性整体研判。</p>
+      </div>
+      <div class="action-row">
+        <span class="pill-badge">LLM: {{ judgeMeta?.used ? (judgeMeta?.model || '已启用') : '未启用' }}</span>
+      </div>
+    </div>
+
+    <div class="judge-summary-card">
+      <span class="judge-summary-flag" :class="judgeResult.overall_risk ? 'danger' : 'success'">
+        {{ judgeResult.overall_risk ? '发现真风险' : '未发现明确风险' }}
+      </span>
+      <div class="judge-summary-text">
+        <strong>{{ judgeResult.assessment }}</strong>
+        <span>
+          共 {{ judgeSummary?.total_groups || 0 }} 个分组（{{ judgeSummary?.total_candidates || 0 }} 个候选包）：
+          风险 {{ judgeSummary?.risk_groups || 0 }} 组、正常 {{ judgeSummary?.benign_groups || 0 }} 组；
+          规则定 {{ judgeSummary?.rule_decided_groups || 0 }} 组，LLM 定 {{ judgeSummary?.llm_decided_groups || 0 }} 组。
+        </span>
+        <span v-if="judgeMeta?.error" class="inline-warning">LLM 降级：{{ judgeMeta.error }}</span>
+      </div>
+    </div>
+
+    <div class="data-table" style="margin-top: 16px;">
+      <el-table :data="judgeGroups" height="360" stripe :default-sort="{ prop: 'is_risk', order: 'descending' }">
+        <el-table-column label="判定" min-width="90" fixed="left">
+          <template #default="{ row }">
+            <span :class="['verdict-pill', row.is_risk ? 'danger' : 'success']">
+              {{ row.is_risk ? '真风险' : '正常' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="src" label="源 IP" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="dst" label="目的 IP" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="scope" label="地址类型" min-width="100" />
+        <el-table-column prop="packets" label="包数" min-width="80" sortable />
+        <el-table-column prop="port_count" label="端口数" min-width="90" sortable />
+        <el-table-column prop="ports" label="端口" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="services" label="服务" min-width="120" show-overflow-tooltip />
+        <el-table-column label="依据" min-width="90">
+          <template #default="{ row }">
+            {{ verdictSourceLabel[row.verdict_source] || verdictSourceLabel.default }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="reason" label="理由" min-width="240" show-overflow-tooltip />
+        <el-table-column prop="confidence" label="置信度" min-width="90" sortable />
+      </el-table>
+    </div>
+  </section>
+
+  <section v-if="result && targetHitsTable.rows.length" class="panel fade-in">
     <div class="section-header">
       <h2 class="section-title">目标 IP 命中</h2>
-      <span class="pill-badge">{{ result.target_hits.total }} 条</span>
+      <span class="pill-badge">{{ targetHitsTable.total }} 条</span>
     </div>
     <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="result.target_hits.rows" height="300" stripe>
+      <el-table :data="targetHitsTable.rows || []" height="300" stripe>
         <el-table-column
-          v-for="col in result.target_hits.columns"
+          v-for="col in targetHitsTable.columns || []"
           :key="col"
           :prop="col"
           :label="columnLabel(col)"
@@ -419,6 +622,29 @@ watch(result, async () => {
         <el-button type="primary" @click="downloadText('side_channel_report.md', aiReport)">
           下载报告
         </el-button>
+      </div>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="publicLookupVisible" title="公网归属地结果" width="1100px">
+    <p v-if="publicLookupTable.lookup?.error" class="inline-warning" style="margin-bottom: 12px;">
+      部分联网查询失败，已保留已有结果：{{ publicLookupTable.lookup.error }}
+    </p>
+    <div class="data-table">
+      <el-table :data="publicLookupTable.rows || []" height="520" stripe>
+        <el-table-column
+          v-for="col in publicLookupTable.columns || []"
+          :key="col"
+          :prop="col"
+          :label="profileColumnLabel(col)"
+          min-width="150"
+          show-overflow-tooltip
+        />
+      </el-table>
+    </div>
+    <template #footer>
+      <div class="action-row">
+        <el-button @click="publicLookupVisible = false">关闭</el-button>
       </div>
     </template>
   </el-dialog>

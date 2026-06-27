@@ -6,12 +6,13 @@ import socket
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import requests
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from sklearn.ensemble import IsolationForest
 
 from backend.auth import optional_user
@@ -56,14 +57,13 @@ FEATURE_DEFS: List[Dict[str, str]] = [
 DEFAULT_FEATURES = ["size", "interval", "port"]
 ALLOWED_FEATURES = {item["key"] for item in FEATURE_DEFS}
 
-# 直连用的 Session：trust_env=False 让 requests 忽略系统/环境变量里的代理
-# （如 HTTP_PROXY=127.0.0.1:7890）。否则代理软件没运行时，IP 归属地查询会
-# 被发往本地代理端口并超时。这里固定走直连，查询更稳定。
+# Optional public-IP lookup is intentionally isolated from the main analysis path.
 _HTTP = requests.Session()
 _HTTP.trust_env = False
 IP_LOOKUP_LIMIT = 100
 IPWHOIS_LOOKUP_LIMIT = 30
 IP_API_FIELDS = "status,message,country,countryCode,regionName,city,isp,org,as,asname,mobile,proxy,hosting,query"
+
 PORT_SERVICE_OVERRIDES = {
     20: "FTP data",
     21: "FTP control",
@@ -92,6 +92,19 @@ PORT_SERVICE_OVERRIDES = {
     9090: "ROS bridge/WebSocket",
     11311: "ROS master",
 }
+
+
+class PublicLookupItem(BaseModel):
+    ip: str
+    scope: Optional[str] = None
+    count: int = 0
+    observed_as_src: int = 0
+    observed_as_dst: int = 0
+    ports: str = "-"
+
+
+class PublicLookupRequest(BaseModel):
+    items: List[PublicLookupItem] = Field(default_factory=list)
 
 
 def _parse_features(raw: Optional[str]) -> List[str]:
@@ -251,30 +264,94 @@ def _lookup_public_ips(ips: List[str]) -> tuple[Dict[str, Dict[str, object]], Di
     return lookup, meta
 
 
-def _build_ip_port_profiles(df: pd.DataFrame) -> Dict[str, object]:
+def _format_location(*parts: object) -> str:
+    values = []
+    for part in parts:
+        text = str(part or "").strip()
+        if text and text != "-":
+            values.append(text)
+    return " ".join(values) if values else "-"
+
+
+def _build_public_lookup_rows(items: List[PublicLookupItem]) -> Dict[str, object]:
     columns = [
         "ip",
         "ip_long",
         "scope",
+        "count",
         "observed_as_src",
         "observed_as_dst",
         "ports",
-        "services",
         "ptr",
         "best_location",
         "ip_api_location",
         "ipwhois_location",
-        "ip2region_location",
-        "geolite2_location",
-        "dbip_location",
         "isp",
         "org",
         "asn",
         "risk_tags",
         "lookup_status",
     ]
+
+    public_items = [item for item in items if _ip_scope(item.ip) == "public"]
+    public_ips = [item.ip for item in public_items]
+    lookup, meta = _lookup_public_ips(public_ips)
+
+    rows: List[Dict[str, object]] = []
+    for item in public_items:
+        info = lookup.get(item.ip, {})
+        ipwhois = info.get("ipwhois") if isinstance(info.get("ipwhois"), dict) else {}
+        risk_tags = []
+        if info.get("hosting"):
+            risk_tags.append("hosting/datacenter")
+        if info.get("proxy"):
+            risk_tags.append("proxy/vpn/tor")
+        if info.get("mobile"):
+            risk_tags.append("mobile")
+
+        ip_api_location = _format_location(info.get("country"), info.get("regionName"), info.get("city"))
+        ipwhois_location = _format_location(ipwhois.get("country"), ipwhois.get("region"), ipwhois.get("city"))
+        best_location = ip_api_location if ip_api_location != "-" else ipwhois_location
+
+        status = info.get("status")
+        if status == "success" or ipwhois.get("success") or info.get("ptr"):
+            lookup_status = "success"
+        elif status == "fail":
+            lookup_status = str(info.get("message") or "fail")
+        elif meta.get("error"):
+            lookup_status = "lookup-error"
+        else:
+            lookup_status = "no-data"
+
+        connection = ipwhois.get("connection") if isinstance(ipwhois.get("connection"), dict) else {}
+        rows.append(
+            {
+                "ip": item.ip,
+                "ip_long": _ip_long(item.ip) or "-",
+                "scope": item.scope or _ip_scope(item.ip),
+                "count": item.count,
+                "observed_as_src": item.observed_as_src,
+                "observed_as_dst": item.observed_as_dst,
+                "ports": item.ports or "-",
+                "ptr": info.get("ptr") or "-",
+                "best_location": best_location,
+                "ip_api_location": ip_api_location,
+                "ipwhois_location": ipwhois_location,
+                "isp": info.get("isp") or ipwhois.get("isp") or "-",
+                "org": info.get("org") or connection.get("org") or "-",
+                "asn": info.get("as") or connection.get("asn") or info.get("asname") or "-",
+                "risk_tags": ", ".join(risk_tags) or "-",
+                "lookup_status": lookup_status,
+            }
+        )
+
+    return {"columns": columns, "rows": rows, "total": len(rows), "lookup": meta}
+
+
+def _build_ip_port_profiles(df: pd.DataFrame) -> Dict[str, object]:
+    columns = ["ip", "scope", "count", "observed_as_src", "observed_as_dst", "ports"]
     if df.empty:
-        return {"columns": columns, "rows": [], "total": 0, "lookup": {"queried": 0, "limit": IP_LOOKUP_LIMIT, "error": None}}
+        return {"columns": columns, "rows": [], "total": 0}
 
     profiles: Dict[str, Dict[str, object]] = {}
 
@@ -287,7 +364,6 @@ def _build_ip_port_profiles(df: pd.DataFrame) -> Dict[str, object]:
                 "observed_as_src": 0,
                 "observed_as_dst": 0,
                 "_ports": set(),
-                "_services": set(),
             },
         )
         return entry
@@ -308,81 +384,63 @@ def _build_ip_port_profiles(df: pd.DataFrame) -> Dict[str, object]:
             dst_entry["observed_as_dst"] = int(dst_entry["observed_as_dst"]) + 1
             if port > 0:
                 dst_entry["_ports"].add(port)
-                dst_entry["_services"].add(_service_name(port))
 
     ordered_ips = sorted(
         profiles,
         key=lambda ip: (
-            profiles[ip]["scope"] != "public",
             -(int(profiles[ip]["observed_as_src"]) + int(profiles[ip]["observed_as_dst"])),
             ip,
         ),
     )
-    lookup, meta = _lookup_public_ips(ordered_ips)
 
     rows: List[Dict[str, object]] = []
     for ip in ordered_ips:
         entry = profiles[ip]
-        info = lookup.get(ip, {})
-        ipwhois = info.get("ipwhois") if isinstance(info.get("ipwhois"), dict) else {}
-        risk_tags = []
-        if info.get("hosting"):
-            risk_tags.append("hosting/datacenter")
-        if info.get("proxy"):
-            risk_tags.append("proxy/vpn/tor")
-        if info.get("mobile"):
-            risk_tags.append("mobile")
-
-        ip_api_location = _format_location(info.get("country"), info.get("regionName"), info.get("city"))
-        ipwhois_location = _format_location(
-            ipwhois.get("country"),
-            ipwhois.get("region"),
-            ipwhois.get("city"),
-        )
-        best_location = ip_api_location if ip_api_location != "-" else ipwhois_location
-
-        status = info.get("status")
-        if entry["scope"] != "public":
-            lookup_status = "skipped-private"
-        elif status == "success" or ipwhois.get("success") or info.get("ptr"):
-            lookup_status = "success"
-        elif status == "fail":
-            lookup_status = str(info.get("message") or "fail")
-        elif meta.get("error"):
-            lookup_status = "lookup-error"
-        else:
-            lookup_status = "no-data"
-
         ports = sorted(entry["_ports"])
-        services = sorted(s for s in entry["_services"] if s and s != "unknown")
-        connection = ipwhois.get("connection") if isinstance(ipwhois.get("connection"), dict) else {}
-        org = info.get("org") or connection.get("org") or "-"
-        asn = info.get("as") or connection.get("asn") or info.get("asname") or "-"
         rows.append(
             {
                 "ip": ip,
-                "ip_long": _ip_long(ip) or "-",
                 "scope": entry["scope"],
+                "count": int(entry["observed_as_src"]) + int(entry["observed_as_dst"]),
                 "observed_as_src": entry["observed_as_src"],
                 "observed_as_dst": entry["observed_as_dst"],
                 "ports": ", ".join(str(port) for port in ports) or "-",
-                "services": ", ".join(services) or "unknown",
-                "ptr": info.get("ptr") or "-",
-                "best_location": best_location,
-                "ip_api_location": ip_api_location,
-                "ipwhois_location": ipwhois_location,
-                "ip2region_location": "-",
-                "geolite2_location": "-",
-                "dbip_location": "-",
-                "isp": info.get("isp") or ipwhois.get("isp") or "-",
-                "org": org,
-                "asn": asn,
-                "risk_tags": ", ".join(risk_tags) or "-",
-                "lookup_status": lookup_status,
             }
         )
 
-    return {"columns": columns, "rows": rows, "total": len(rows), "lookup": meta}
+    return {"columns": columns, "rows": rows, "total": len(rows)}
+
+
+def _build_port_profiles(df: pd.DataFrame) -> Dict[str, object]:
+    columns = ["port", "service", "count", "src_ips", "dst_ips"]
+    if df.empty or "port" not in df.columns:
+        return {"columns": columns, "rows": [], "total": 0}
+
+    port_rows: List[Dict[str, object]] = []
+    grouped = df.copy()
+    grouped["port"] = grouped["port"].fillna(0)
+    grouped["port"] = grouped["port"].apply(lambda value: int(float(value)) if str(value).strip() else 0)
+
+    for port_value, group in grouped.groupby("port", dropna=False):
+        port_int = int(port_value) if str(port_value).strip() else 0
+        if port_int <= 0:
+            continue
+        src_ips = group["src"].fillna("").astype(str).str.strip()
+        dst_ips = group["dst"].fillna("").astype(str).str.strip()
+        unique_src = sorted(ip for ip in src_ips.unique().tolist() if ip)
+        unique_dst = sorted(ip for ip in dst_ips.unique().tolist() if ip)
+        port_rows.append(
+            {
+                "port": port_int,
+                "service": _service_name(port_int),
+                "count": int(len(group)),
+                "src_ips": ", ".join(unique_src[:10]) or "-",
+                "dst_ips": ", ".join(unique_dst[:10]) or "-",
+            }
+        )
+
+    port_rows.sort(key=lambda row: (-int(row["count"]), int(row["port"])))
+    return {"columns": columns, "rows": port_rows, "total": len(port_rows)}
 
 
 def _build_table(df: pd.DataFrame, limit: int) -> Dict[str, object]:
@@ -425,6 +483,11 @@ def list_features() -> Dict[str, object]:
         "defaults": DEFAULT_FEATURES,
         "features": FEATURE_DEFS,
     }
+
+
+@router.post("/public-lookup")
+def lookup_public_ips(payload: PublicLookupRequest) -> Dict[str, object]:
+    return _build_public_lookup_rows(payload.items)
 
 
 @router.post("/analyze")
@@ -473,6 +536,7 @@ async def analyze_side_channel(
             "anomalies": {"columns": [], "rows": [], "total": 0, "limit": anomaly_limit},
             "target_hits": {"columns": [], "rows": [], "total": 0, "limit": anomaly_limit},
             "ip_port_profiles": _build_ip_port_profiles(df),
+            "port_profiles": _build_port_profiles(df),
         }
         create_task(
             task_id=run_id,
@@ -547,6 +611,7 @@ async def analyze_side_channel(
         "anomalies": _build_table(anomalies, anomaly_limit),
         "target_hits": _build_table(target_hits, anomaly_limit),
         "ip_port_profiles": _build_ip_port_profiles(df),
+        "port_profiles": _build_port_profiles(df),
     }
     create_task(
         task_id=run_id,

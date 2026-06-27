@@ -20,6 +20,7 @@ from backend.motion_api import router as motion_router
 from backend.motion_recognition_api import router as motion_recognition_router
 from backend.papb_api import router as papb_router
 from backend.side_channel_api import router as side_channel_router
+from backend.side_channel_judge import router as side_channel_judge_router
 from backend.tasks_api import router as tasks_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(side_channel_router)
+app.include_router(side_channel_judge_router)
 app.include_router(auth_router)
 app.include_router(ai_report_router)
 app.include_router(motion_router)

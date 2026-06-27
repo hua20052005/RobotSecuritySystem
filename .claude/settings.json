@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(python -c ' *)",
+      "Bash(tshark -v)",
+      "Bash(tcpdump --version)",
+      "Bash(python filter_ssh.py validate)",
+      "Bash(python filter_ssh.py run)",
+      "Bash(cd \"d:/桌面/study/信安赛/RobotSecuritySystem - 副本/motion/0615\" && mkdir -p raw_pcaps && mv seq1.pcap seq2.pcap seq3.pcap seq4.pcap seq5.pcap seq6.pcap seq7.pcap seq8.pcap raw_pcaps/ && mv 0613/*.pcap raw_pcaps/ && echo \"=== raw_pcaps 内容 \\(应为20个\\) ===\" && ls raw_pcaps/ | sort && echo \"count:\" && ls raw_pcaps/*.pcap | wc -l)",
+      "Bash(cd \"/d/桌面/study/信安赛/RobotSecuritySystem - 副本\" && find motion -maxdepth 3 -type d 2>/dev/null | head -40; echo \"=== clean dir ===\"; ls -la motion/0615/clean 2>/dev/null | head -40)",
+      "Read(//d/d/桌面/study/信安赛/RobotSecuritySystem - 副本/**)",
+      "Bash(npx vite *)"
+    ],
+    "additionalDirectories": [
+      "D:\\桌面\\study\\信安赛\\RobotSecuritySystem - 副本\\motion\\0615\\0613"
+    ]
+  }
+}
