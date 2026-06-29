@@ -14,7 +14,8 @@
       "Bash(xxd \"motion/0615/clean/0615_seq1.pcap\")",
       "Bash(python -c \"print\\(open\\('motion/0615/clean/0615_seq1.pcap','rb'\\).read\\(8\\).hex\\(\\)\\)\")",
       "Bash(venv/Scripts/python.exe -c \"import backend.motion_recognition_api as m; import inspect; print\\('handler is async:', inspect.iscoroutinefunction\\(m.recognize_motion_file\\)\\); print\\('OK'\\)\")",
-      "Bash(git rev-list *)"
+      "Bash(git rev-list *)",
+      "Bash(grep -n \"^\\\\.entry-panel \\\\|^\\\\.entry-copy h1\\\\|^\\\\.page-heading h1\\\\|^\\\\.section-title\\\\|^\\\\.panel,\\\\|^\\\\.panel {\\\\|^\\\\.metric-card\\\\|^\\\\.metric-value\\\\|^\\\\.workflow-step\\\\|--shadow-card\\\\|--shadow-soft\\\\|--line:\" src/style.css)"
     ],
     "additionalDirectories": [
       "D:\\桌面\\study\\信安赛\\RobotSecuritySystem - 副本\\motion\\0615\\0613"
