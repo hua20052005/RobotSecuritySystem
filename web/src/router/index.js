@@ -5,9 +5,9 @@ import HomeView from '../views/HomeView.vue'
 // 入口页 HomeView 静态引入保证首屏即时渲染；其余页面按需懒加载，
 // 各自打成独立 chunk（含 ECharts 的页面只在进入时才下载）。
 const SideChannelView = () => import('../views/SideChannelView.vue')
-const PayloadView = () => import('../views/PayloadView.vue')
 const MotionView = () => import('../views/MotionView.vue')
 const PapbView = () => import('../views/PapbView.vue')
+const EtBertView = () => import('../views/EtBertView.vue')
 const HistoryView = () => import('../views/HistoryView.vue')
 const ProfileView = () => import('../views/ProfileView.vue')
 
@@ -16,7 +16,7 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView },
     { path: '/side-channel', name: 'side-channel', component: SideChannelView, meta: { title: '侧信道流量分析' } },
-    { path: '/payload', name: 'payload', component: PayloadView, meta: { title: '通信载荷检测' } },
+    { path: '/payload', name: 'payload', component: EtBertView, meta: { title: '通信载荷检测' } },
     { path: '/motion', name: 'motion', component: MotionView, meta: { title: '动作序列识别与异常分析' } },
     { path: '/papb', name: 'papb', component: PapbView, meta: { title: 'PAPB 流程校验' } },
     { path: '/history', name: 'history', component: HistoryView, meta: { title: '审计历史', requiresAuth: true } },

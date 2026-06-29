@@ -16,6 +16,7 @@ from backend.auth import optional_user
 from backend.ai_report import router as ai_report_router
 from backend.auth_api import router as auth_router
 from backend.db import create_task, init_db
+from backend.etbert_api.main import app as etbert_app
 from backend.motion_api import router as motion_router
 from backend.motion_recognition_api import router as motion_recognition_router
 from backend.papb_api import router as papb_router
@@ -48,7 +49,14 @@ app.include_router(motion_router)
 app.include_router(motion_recognition_router)
 app.include_router(papb_router)
 app.include_router(tasks_router)
+app.mount("/api/etbert", etbert_app)
 init_db()
+
+
+@app.on_event("startup")
+def startup():
+    from backend.etbert_api.main import preload_models
+    preload_models()
 
 
 def _read_csv_preview(csv_path: Path, max_rows: int = 200) -> List[Dict[str, str]]:

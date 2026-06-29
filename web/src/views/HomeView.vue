@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const openAuth = inject('openAuth')
 
-const features = ['侧信道分析', '载荷检测', '动作序列识别', 'PAPB 流程校验']
+const features = ['侧信道分析', 'ET-BERT 双粒度检测', '动作序列识别', 'PAPB 流程校验']
 </script>
 
 <template>
@@ -25,7 +25,7 @@ const features = ['侧信道分析', '载荷检测', '动作序列识别', 'PAPB
         <h1>机器人控制流量审计台</h1>
       </div>
       <p>
-        面向比赛演示与本地复核的安全分析工具。把侧信道、载荷、运动时序和 PAPB
+        面向比赛演示与本地复核的安全分析工具。把侧信道、ET-BERT 双粒度检测、运动时序和 PAPB
         流程校验放进同一个工作台，从一份流量证据追到具体异常。
       </p>
       <div class="home-actions">

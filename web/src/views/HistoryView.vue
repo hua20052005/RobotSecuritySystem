@@ -18,7 +18,7 @@ const pageSize = 8
 
 const moduleName = {
   'side-channel': '侧信道',
-  payload: '载荷检测',
+  payload: 'ET-BERT 双粒度检测',
   motion: '运动建模',
   papb: 'PAPB流程',
 }
@@ -104,7 +104,7 @@ onMounted(loadTasks)
       <el-tabs v-model="moduleFilter" class="history-tabs">
         <el-tab-pane label="全部" name="" />
         <el-tab-pane label="侧信道" name="side-channel" />
-        <el-tab-pane label="载荷检测" name="payload" />
+        <el-tab-pane label="ET-BERT" name="payload" />
         <el-tab-pane label="运动建模" name="motion" />
         <el-tab-pane label="PAPB流程" name="papb" />
       </el-tabs>
