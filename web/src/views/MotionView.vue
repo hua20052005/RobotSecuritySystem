@@ -1,12 +1,13 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
 import MetricCard from '../components/MetricCard.vue'
+import { downloadJson } from '../lib/download'
+import { errorText } from '../lib/http-error'
+import { useSingleUpload } from '../composables/useSingleUpload'
 
-const fileList = ref([])
-const selectedFile = ref(null)
+const { fileList, selectedFile, handleChange: handleFileChange, handleRemove } = useSingleUpload()
 const loading = ref(false)
 const result = ref(null)
 
@@ -34,25 +35,6 @@ const statusMeta = computed(() => {
 })
 const mainReason = computed(() => violations.value[0]?.reason || statusMeta.value.explain)
 const rawJson = computed(() => (result.value ? JSON.stringify(result.value, null, 2) : ''))
-
-const handleFileChange = (file) => {
-  selectedFile.value = file.raw
-  fileList.value = [file]
-}
-
-const handleRemove = () => {
-  selectedFile.value = null
-  fileList.value = []
-}
-
-const errorText = (error) => {
-  const detail = error.response?.data?.detail
-  if (Array.isArray(detail)) return detail.map((item) => item.msg).join('；')
-  if (typeof detail === 'string') return detail
-  if (detail?.message) return detail.message
-  if (error.code === 'ERR_NETWORK') return '无法连接后端服务，请先启动 127.0.0.1:8010。'
-  return '动作序列识别失败，请检查后端服务、模型文件和上传的 pcap。'
-}
 
 const runRecognition = async () => {
   if (!selectedFile.value) {
@@ -86,26 +68,25 @@ const runRecognition = async () => {
       ElMessage.success('动作序列识别完成')
     }
   } catch (error) {
-    ElMessage.error(errorText(error))
+    ElMessage.error(errorText(error, '动作序列识别失败，请检查后端服务、模型文件和上传的 pcap。'))
   } finally {
     loading.value = false
   }
 }
 
-const downloadJson = () => {
+const exportJson = () => {
   if (!result.value) return
-  const blob = new Blob([rawJson.value], { type: 'application/json;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${result.value.run_id || 'motion_sequence'}_result.json`
-  link.click()
-  URL.revokeObjectURL(url)
+  downloadJson(`${result.value.run_id || 'motion_sequence'}_result.json`, result.value)
 }
 </script>
 
 <template>
-  <section class="panel fade-in">
+  <section
+    class="panel fade-in"
+    v-loading.fullscreen.lock="loading"
+    element-loading-text="正在从流量中识别动作序列并校验流程，可能需要 1-2 分钟…"
+    element-loading-background="rgba(255, 255, 255, 0.85)"
+  >
     <div class="section-header">
       <div>
         <h2 class="section-title">动作序列识别与异常分析</h2>
@@ -170,7 +151,7 @@ const downloadJson = () => {
 
         <div class="action-row">
           <el-button type="primary" :loading="loading" @click="runRecognition">开始识别与分析</el-button>
-          <el-button :disabled="!result" @click="downloadJson">导出 JSON</el-button>
+          <el-button :disabled="!result" @click="exportJson">导出 JSON</el-button>
           <span class="pill-badge">第三模块：动作识别 + 时序异常分析</span>
         </div>
       </div>
@@ -186,7 +167,7 @@ const downloadJson = () => {
       <span class="pill-badge">run_id: {{ result.run_id }}</span>
     </div>
 
-    <div class="grid-3" style="margin-top: 18px;">
+    <div class="grid-3 mt-18">
       <MetricCard title="识别动作数" :value="String(actions.length)" subtitle="从 pcap 中识别出的动作标签" />
       <MetricCard title="流程状态" :value="statusMeta.text" subtitle="PAPB 动作转移校验结果" />
       <MetricCard title="异常条目" :value="String(violations.length)" subtitle="违反流程或模板的位置数量" />
@@ -206,8 +187,8 @@ const downloadJson = () => {
         <h2 class="section-title">识别片段</h2>
         <span class="pill-badge">{{ segments.length }} 段</span>
       </div>
-      <div class="data-table" style="margin-top: 14px;">
-        <el-table :data="segments" height="280" stripe empty-text="暂无片段明细">
+      <div class="data-table mt-14">
+        <el-table :data="segments" max-height="280" stripe empty-text="暂无片段明细">
           <el-table-column prop="label" label="动作" min-width="110" />
           <el-table-column label="开始 s" width="100">
             <template #default="{ row }">{{ Number(row.start_s || 0).toFixed(2) }}</template>
@@ -227,8 +208,8 @@ const downloadJson = () => {
         <h2 class="section-title">异常原因</h2>
         <span class="pill-badge" :class="{ 'badge-danger': violations.length }">{{ violations.length }} 条</span>
       </div>
-      <div class="data-table" style="margin-top: 14px;">
-        <el-table :data="violations" height="280" stripe empty-text="暂无异常原因">
+      <div class="data-table mt-14">
+        <el-table :data="violations" max-height="280" stripe empty-text="暂无异常原因">
           <el-table-column prop="index" label="位置" width="72" />
           <el-table-column prop="previous" label="前一动作" min-width="110" />
           <el-table-column prop="actual" label="实际动作" min-width="110" />
@@ -243,8 +224,8 @@ const downloadJson = () => {
       <h2 class="section-title">动作转移风险</h2>
       <span class="pill-badge">最高风险 {{ Number(flow?.transition_check?.max_risk || 0).toFixed(2) }}</span>
     </div>
-    <div class="data-table" style="margin-top: 14px;">
-      <el-table :data="transitions" height="300" stripe>
+    <div class="data-table mt-14">
+      <el-table :data="transitions" max-height="300" stripe>
         <el-table-column prop="index" label="步" width="72" />
         <el-table-column label="转移" min-width="220">
           <template #default="{ row }">{{ row.previous }} -> {{ row.actual }}</template>
@@ -265,8 +246,8 @@ const downloadJson = () => {
       <h2 class="section-title">最接近的正常模板</h2>
       <span class="pill-badge">Top {{ candidates.length }}</span>
     </div>
-    <div class="data-table" style="margin-top: 14px;">
-      <el-table :data="candidates" height="260" stripe>
+    <div class="data-table mt-14">
+      <el-table :data="candidates" max-height="260" stripe>
         <el-table-column prop="template_index" label="模板" width="90" />
         <el-table-column prop="edit_distance" label="编辑距离" width="110" />
         <el-table-column label="错误比例" width="110">
@@ -280,11 +261,14 @@ const downloadJson = () => {
   </section>
 
   <section v-if="result" class="panel fade-in">
-    <div class="section-header">
-      <h2 class="section-title">完整返回</h2>
-      <span class="pill-badge">用于调试、复现实验和写论文表格</span>
-    </div>
-    <pre class="json-preview" style="margin-top: 14px;">{{ rawJson }}</pre>
+    <el-collapse class="raw-collapse">
+      <el-collapse-item name="raw">
+        <template #title>
+          <h2 class="section-title">完整返回 JSON（调试 / 复现实验 / 写论文表格用，点击展开）</h2>
+        </template>
+        <pre class="json-preview">{{ rawJson }}</pre>
+      </el-collapse-item>
+    </el-collapse>
   </section>
 
   <section v-else class="empty-state fade-in">

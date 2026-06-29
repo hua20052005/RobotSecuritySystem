@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
 import MarkdownReport from '../components/MarkdownReport.vue'
+import { downloadJson } from '../lib/download'
+import { formatTime } from '../lib/format'
 
 const tasks = ref([])
 const selected = ref(null)
@@ -41,8 +42,6 @@ const pageTasks = computed(() => {
   const start = (page.value - 1) * pageSize
   return filteredTasks.value.slice(start, start + pageSize)
 })
-
-const formatTime = (value) => value ? new Date(value).toLocaleString() : '-'
 
 const riskLevel = (task) => {
   const s = task.summary || {}
@@ -89,17 +88,12 @@ const openTask = async (task) => {
   }
 }
 
-const exportJson = (task) => {
-  const blob = new Blob([JSON.stringify(task, null, 2)], { type: 'application/json;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${task.id}_task.json`
-  link.click()
-  URL.revokeObjectURL(url)
-}
+const exportJson = (task) => downloadJson(`${task.id}_task.json`, task)
 
-const exportAll = () => exportJson({ exported_at: new Date().toISOString(), tasks: filteredTasks.value })
+const exportAll = () => downloadJson('history_tasks.json', {
+  exported_at: new Date().toISOString(),
+  tasks: filteredTasks.value,
+})
 
 onMounted(loadTasks)
 </script>
@@ -115,13 +109,13 @@ onMounted(loadTasks)
         <el-tab-pane label="PAPB流程" name="papb" />
       </el-tabs>
       <div class="history-filters">
-        <el-select v-model="dateFilter" style="width: 132px;">
+        <el-select v-model="dateFilter" class="w-132">
           <el-option label="全部时间" value="all" />
           <el-option label="最近一天" value="1" />
           <el-option label="最近7天" value="7" />
           <el-option label="最近30天" value="30" />
         </el-select>
-        <el-input v-model="keyword" placeholder="搜索任务或模块" clearable style="width: 220px;" />
+        <el-input v-model="keyword" placeholder="搜索任务或模块" clearable class="w-220" />
         <el-button @click="exportAll">导出全部</el-button>
       </div>
     </div>

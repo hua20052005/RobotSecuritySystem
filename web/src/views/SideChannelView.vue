@@ -1,18 +1,19 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import echarts from '../lib/echarts'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import api from '../api/client'
 import MarkdownReport from '../components/MarkdownReport.vue'
 import MetricCard from '../components/MetricCard.vue'
+import { downloadText } from '../lib/download'
+import { errorText } from '../lib/http-error'
+import { useSingleUpload } from '../composables/useSingleUpload'
+import { useChart } from '../composables/useChart'
 
 const featureOptions = ref([])
 const selectedFeatures = ref([])
 const contamination = ref(0.06)
 const targetIp = ref('')
-const fileList = ref([])
-const selectedFile = ref(null)
+const { fileList, selectedFile, handleChange: handleFileChange, handleRemove } = useSingleUpload()
 
 const loading = ref(false)
 const result = ref(null)
@@ -29,8 +30,8 @@ const publicLookupRows = computed(() => (ipProfilesTable.value.rows || []).filte
 
 const scatterRef = ref(null)
 const histRef = ref(null)
-let scatterChart = null
-let histChart = null
+const scatterChart = useChart(scatterRef)
+const histChart = useChart(histRef)
 
 const publicLookupLoading = ref(false)
 const publicLookupVisible = ref(false)
@@ -101,16 +102,6 @@ const columnLabel = (key) => columnLabelMap[key] || key
 const profileColumnLabel = (key) => profileColumnLabelMap[key] || key
 const portColumnLabel = (key) => portColumnLabelMap[key] || key
 
-const downloadText = (filename, text) => {
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 const fetchFeatures = async () => {
   try {
     const { data } = await api.get('/api/side-channel/features')
@@ -126,16 +117,6 @@ const fetchFeatures = async () => {
     selectedFeatures.value = fallbackDefaults
     ElMessage.error('特征列表读取失败，已使用默认特征。')
   }
-}
-
-const handleFileChange = (file) => {
-  selectedFile.value = file.raw
-  fileList.value = [file]
-}
-
-const handleRemove = () => {
-  selectedFile.value = null
-  fileList.value = []
 }
 
 const toNumber = (value, fallback = 0) => {
@@ -177,7 +158,7 @@ const openPublicLookup = async () => {
     publicLookupTable.value = data
     publicLookupVisible.value = true
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '公网归属地查询失败。')
+    ElMessage.error(errorText(error, '公网归属地查询失败。'))
   } finally {
     publicLookupLoading.value = false
   }
@@ -204,7 +185,7 @@ const runJudge = async () => {
       `二次判断完成：${s.total_groups || 0} 个分组中确认风险 ${s.risk_groups || 0} 组、排除误报 ${s.benign_groups || 0} 组。`,
     )
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '二次判断失败，请检查后端日志。')
+    ElMessage.error(errorText(error, '二次判断失败，请检查后端日志。'))
   } finally {
     judgeLoading.value = false
   }
@@ -217,68 +198,55 @@ const renderCharts = () => {
   const histogramData = normalizeHistogram(result.value.histogram)
 
   try {
-    if (scatterRef.value && !scatterChart) scatterChart = echarts.init(scatterRef.value)
-    if (histRef.value && !histChart) histChart = echarts.init(histRef.value)
+    const scores = scatterData.map((item) => item[2]).filter((item) => Number.isFinite(item))
+    const minScore = scores.length ? Math.min(...scores) : -0.3
+    const maxScore = scores.length ? Math.max(...scores) : 0.3
 
-    if (scatterChart) {
-      const scores = scatterData.map((item) => item[2]).filter((item) => Number.isFinite(item))
-      const minScore = scores.length ? Math.min(...scores) : -0.3
-      const maxScore = scores.length ? Math.max(...scores) : 0.3
+    scatterChart.setOption({
+      tooltip: { trigger: 'item' },
+      grid: { left: 54, right: 72, top: 26, bottom: 52 },
+      xAxis: {
+        name: featureLabel(result.value.features?.x || 'x'),
+        nameLocation: 'middle',
+        nameGap: 32,
+        axisLabel: { color: '#657589' },
+        splitLine: { lineStyle: { color: '#e2eaf1' } },
+      },
+      yAxis: {
+        name: featureLabel(result.value.features?.y || 'y'),
+        nameLocation: 'middle',
+        nameGap: 42,
+        axisLabel: { color: '#657589' },
+        splitLine: { lineStyle: { color: '#e2eaf1' } },
+      },
+      visualMap: {
+        min: minScore,
+        max: maxScore,
+        dimension: 2,
+        orient: 'vertical',
+        right: 4,
+        top: 20,
+        inRange: { color: ['#b54708', '#0f766e'] },
+        textStyle: { color: '#657589' },
+      },
+      series: [{ type: 'scatter', data: scatterData, symbolSize: 8, itemStyle: { opacity: 0.82 } }],
+    }, true)
 
-      scatterChart.setOption({
-        tooltip: { trigger: 'item' },
-        grid: { left: 54, right: 72, top: 26, bottom: 52 },
-        xAxis: {
-          name: featureLabel(result.value.features?.x || 'x'),
-          nameLocation: 'middle',
-          nameGap: 32,
-          axisLabel: { color: '#657589' },
-          splitLine: { lineStyle: { color: '#e2eaf1' } },
-        },
-        yAxis: {
-          name: featureLabel(result.value.features?.y || 'y'),
-          nameLocation: 'middle',
-          nameGap: 42,
-          axisLabel: { color: '#657589' },
-          splitLine: { lineStyle: { color: '#e2eaf1' } },
-        },
-        visualMap: {
-          min: minScore,
-          max: maxScore,
-          dimension: 2,
-          orient: 'vertical',
-          right: 4,
-          top: 20,
-          inRange: { color: ['#b54708', '#0f766e'] },
-          textStyle: { color: '#657589' },
-        },
-        series: [{ type: 'scatter', data: scatterData, symbolSize: 8, itemStyle: { opacity: 0.82 } }],
-      }, true)
-    }
-
-    if (histChart) {
-      histChart.setOption({
-        tooltip: { trigger: 'axis' },
-        grid: { left: 44, right: 18, top: 24, bottom: 44 },
-        xAxis: {
-          type: 'category',
-          data: histogramData.bins.map((value) => value.toFixed(3)),
-          axisLabel: { color: '#657589', interval: 4 },
-        },
-        yAxis: { axisLabel: { color: '#657589' }, splitLine: { lineStyle: { color: '#e2eaf1' } } },
-        series: [{ type: 'bar', data: histogramData.counts, itemStyle: { color: '#0f766e' }, barWidth: '60%' }],
-      }, true)
-    }
+    histChart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 44, right: 18, top: 24, bottom: 44 },
+      xAxis: {
+        type: 'category',
+        data: histogramData.bins.map((value) => value.toFixed(3)),
+        axisLabel: { color: '#657589', interval: 4 },
+      },
+      yAxis: { axisLabel: { color: '#657589' }, splitLine: { lineStyle: { color: '#e2eaf1' } } },
+      series: [{ type: 'bar', data: histogramData.counts, itemStyle: { color: '#0f766e' }, barWidth: '60%' }],
+    }, true)
   } catch (error) {
     // Keep UI usable when chart rendering fails due unexpected runtime data.
     console.error('renderCharts failed:', error)
   }
-
-  // Some layouts report 0-size on the first frame; force a second pass after paint.
-  requestAnimationFrame(() => {
-    scatterChart?.resize()
-    histChart?.resize()
-  })
 }
 
 const runAnalysis = async () => {
@@ -306,7 +274,7 @@ const runAnalysis = async () => {
     await nextTick()
     renderCharts()
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '侧信道分析失败，请检查后端日志。')
+    ElMessage.error(errorText(error, '侧信道分析失败，请检查后端日志。'))
   } finally {
     loading.value = false
   }
@@ -352,27 +320,13 @@ const generateReport = async () => {
     aiReport.value = data.report || ''
     reportDialogVisible.value = true
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '报告生成失败。')
+    ElMessage.error(errorText(error, '报告生成失败。'))
   } finally {
     reportLoading.value = false
   }
 }
 
-const handleResize = () => {
-  scatterChart?.resize()
-  histChart?.resize()
-}
-
-onMounted(async () => {
-  await fetchFeatures()
-  window.addEventListener('resize', handleResize)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize)
-  scatterChart?.dispose()
-  histChart?.dispose()
-})
+onMounted(fetchFeatures)
 
 watch(result, async () => {
   await nextTick()
@@ -382,7 +336,12 @@ watch(result, async () => {
 </script>
 
 <template>
-  <section class="panel fade-in">
+  <section
+    class="panel fade-in"
+    v-loading.fullscreen.lock="loading"
+    element-loading-text="正在解析流量并运行 IsolationForest，文件较大时可能需要 1-2 分钟…"
+    element-loading-background="rgba(255, 255, 255, 0.85)"
+  >
     <div class="section-header">
       <div>
         <h2 class="section-title">分析输入</h2>
@@ -477,8 +436,8 @@ watch(result, async () => {
         </el-button>
       </div>
     </div>
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="ipProfilesTable.rows || []" height="300" stripe>
+    <div class="data-table mt-16">
+      <el-table :data="ipProfilesTable.rows || []" max-height="300" stripe>
         <el-table-column
           v-for="col in ipProfilesTable.columns || []"
           :key="col"
@@ -496,8 +455,8 @@ watch(result, async () => {
       <h2 class="section-title">端口统计</h2>
       <span class="pill-badge">按出现次数排序</span>
     </div>
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="portProfilesTable.rows || []" height="300" stripe>
+    <div class="data-table mt-16">
+      <el-table :data="portProfilesTable.rows || []" max-height="300" stripe>
         <el-table-column
           v-for="col in portProfilesTable.columns || []"
           :key="col"
@@ -524,8 +483,8 @@ watch(result, async () => {
       </div>
     </div>
 
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="anomalyTable.rows || []" height="360" stripe>
+    <div class="data-table mt-16">
+      <el-table :data="anomalyTable.rows || []" max-height="360" stripe>
         <el-table-column
           v-for="col in anomalyTable.columns || []"
           :key="col"
@@ -564,8 +523,8 @@ watch(result, async () => {
       </div>
     </div>
 
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="judgeGroups" height="360" stripe :default-sort="{ prop: 'is_risk', order: 'descending' }">
+    <div class="data-table mt-16">
+      <el-table :data="judgeGroups" max-height="360" stripe :default-sort="{ prop: 'is_risk', order: 'descending' }">
         <el-table-column label="判定" min-width="90" fixed="left">
           <template #default="{ row }">
             <span :class="['verdict-pill', row.is_risk ? 'danger' : 'success']">
@@ -596,8 +555,8 @@ watch(result, async () => {
       <h2 class="section-title">目标 IP 命中</h2>
       <span class="pill-badge">{{ targetHitsTable.total }} 条</span>
     </div>
-    <div class="data-table" style="margin-top: 16px;">
-      <el-table :data="targetHitsTable.rows || []" height="300" stripe>
+    <div class="data-table mt-16">
+      <el-table :data="targetHitsTable.rows || []" max-height="300" stripe>
         <el-table-column
           v-for="col in targetHitsTable.columns || []"
           :key="col"
@@ -627,11 +586,11 @@ watch(result, async () => {
   </el-dialog>
 
   <el-dialog v-model="publicLookupVisible" title="公网归属地结果" width="1100px">
-    <p v-if="publicLookupTable.lookup?.error" class="inline-warning" style="margin-bottom: 12px;">
+    <p v-if="publicLookupTable.lookup?.error" class="inline-warning mb-12">
       部分联网查询失败，已保留已有结果：{{ publicLookupTable.lookup.error }}
     </p>
     <div class="data-table">
-      <el-table :data="publicLookupTable.rows || []" height="520" stripe>
+      <el-table :data="publicLookupTable.rows || []" max-height="520" stripe>
         <el-table-column
           v-for="col in publicLookupTable.columns || []"
           :key="col"

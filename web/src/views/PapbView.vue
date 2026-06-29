@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 
 import api from '../api/client'
+import { downloadText, downloadJson } from '../lib/download'
+import { errorText } from '../lib/http-error'
 
 const sequenceText = ref('start, inspect_area, pick_tool, grind_beans, prepare_filter, boil_water, pour_water, serve, clean_tool, shutdown')
 const autoReview = ref(true)
@@ -99,13 +100,6 @@ const parseActions = (value) => value
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean)
-
-const errorText = (error, fallback) => {
-  const detail = error.response?.data?.detail
-  if (typeof detail === 'string') return detail
-  if (detail?.message) return detail.message
-  return fallback
-}
 
 const loadSummary = async () => {
   const { data } = await api.get('/api/papb/summary')
@@ -285,26 +279,6 @@ const openReport = () => {
   reportDialogVisible.value = true
 }
 
-const downloadText = (filename, text) => {
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-const downloadJson = (filename, data) => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 onMounted(refreshAll)
 </script>
 
@@ -316,7 +290,7 @@ onMounted(refreshAll)
         <p class="panel-sub">把“动作识别结果”直接送入 PAPB，完成流程合法性检测、流程图解释、历史保存、审核更新和报告导出。</p>
       </div>
     </div>
-    <div class="workflow-strip" style="margin-top: 18px;">
+    <div class="workflow-strip mt-18">
       <div v-for="(step, index) in pipelineSteps" :key="step.title" class="workflow-step">
         <span>{{ index + 1 }}</span>
         <div>
@@ -341,7 +315,7 @@ onMounted(refreshAll)
       </div>
     </div>
 
-    <div class="papb-layout" style="margin-top: 18px;">
+    <div class="papb-layout mt-18">
       <div class="papb-input-block">
         <el-input v-model="sequenceText" type="textarea" :rows="8" placeholder="start, inspect_area, pick_tool, ... 或 start -> inspect_area -> pick_tool" />
         <div class="action-row">
@@ -407,13 +381,13 @@ onMounted(refreshAll)
       :type="result.status === 'ANOMALY' ? 'error' : result.status === 'UNKNOWN_VALIDITY' ? 'warning' : 'success'"
       show-icon
       :closable="false"
-      style="margin-top: 14px;"
+      class="mt-14"
     />
 
-    <div class="grid-2" style="margin-top: 16px;">
+    <div class="grid-2 mt-16">
       <div class="data-table">
         <div class="chart-title">异常或偏差说明</div>
-        <el-table :data="violations" height="260" stripe empty-text="没有违规项">
+        <el-table :data="violations" max-height="260" stripe empty-text="没有违规项">
           <el-table-column prop="index" label="位置" width="80" />
           <el-table-column prop="previous" label="前一动作" min-width="120" />
           <el-table-column prop="actual" label="实际动作" min-width="120" />
@@ -422,7 +396,7 @@ onMounted(refreshAll)
       </div>
       <div class="data-table">
         <div class="chart-title">与正常模板的对齐</div>
-        <el-table :data="matchedOperations" height="260" stripe empty-text="暂无对齐明细">
+        <el-table :data="matchedOperations" max-height="260" stripe empty-text="暂无对齐明细">
           <el-table-column prop="op" label="类型" width="90" />
           <el-table-column prop="actual" label="实际" min-width="110" />
           <el-table-column prop="expected" label="期望" min-width="110" />
@@ -442,8 +416,8 @@ onMounted(refreshAll)
         禁止转移 {{ transitionCheck.forbidden_count || 0 }} 条 · 最高风险 {{ Number(transitionCheck.max_risk || 0).toFixed(2) }}
       </span>
     </div>
-    <div class="data-table" style="margin-top: 14px;">
-      <el-table :data="transitions" height="300" stripe>
+    <div class="data-table mt-14">
+      <el-table :data="transitions" max-height="300" stripe>
         <el-table-column label="步" prop="index" width="64" />
         <el-table-column label="转移" min-width="220">
           <template #default="{ row }">{{ row.previous }} → {{ row.actual }}</template>
@@ -473,8 +447,8 @@ onMounted(refreshAll)
       <h2 class="section-title">相近正常模板</h2>
       <span class="pill-badge">Top {{ candidateMatches.length }}</span>
     </div>
-    <div class="data-table" style="margin-top: 14px;">
-      <el-table :data="candidateMatches" height="260" stripe>
+    <div class="data-table mt-14">
+      <el-table :data="candidateMatches" max-height="260" stripe>
         <el-table-column prop="template_index" label="模板" width="90" />
         <el-table-column prop="edit_distance" label="编辑距离" width="120" />
         <el-table-column prop="error_ratio" label="错误比例" width="120">
@@ -497,7 +471,7 @@ onMounted(refreshAll)
         <el-button @click="loadPending">刷新</el-button>
       </div>
       <div class="data-table">
-        <el-table :data="pending" height="340" stripe empty-text="暂无待审核序列">
+        <el-table :data="pending" max-height="340" stripe empty-text="暂无待审核序列">
           <el-table-column label="动作序列" min-width="240" show-overflow-tooltip>
             <template #default="{ row }">{{ row.actions?.join(' -> ') }}</template>
           </el-table-column>
@@ -544,9 +518,9 @@ onMounted(refreshAll)
         </label>
       </div>
 
-      <div class="data-table" style="margin-top: 16px;">
+      <div class="data-table mt-16">
         <div class="chart-title">当前正常模板</div>
-        <el-table :data="modelDetail?.normal_templates || []" height="220" stripe empty-text="暂无模板">
+        <el-table :data="modelDetail?.normal_templates || []" max-height="220" stripe empty-text="暂无模板">
           <el-table-column label="序号" width="80">
             <template #default="{ $index }">{{ $index + 1 }}</template>
           </el-table-column>

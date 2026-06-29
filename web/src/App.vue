@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, provide, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import api from './api/client'
+import { errorText } from './lib/http-error'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +35,21 @@ const userInitial = computed(() => {
   return name.slice(0, 1).toUpperCase()
 })
 
+// 后端健康状态：'checking' | 'online' | 'offline'，由轮询 /health 真实反映。
+const serverStatus = ref('checking')
+const statusText = computed(() => ({ online: '服务在线', offline: '服务离线', checking: '检测中' }[serverStatus.value]))
+const apiHost = computed(() => (api.defaults.baseURL || '').replace(/^https?:\/\//, '') || '本地服务')
+
+let healthTimer = null
+const checkHealth = async () => {
+  try {
+    await api.get('/health', { timeout: 5000 })
+    serverStatus.value = 'online'
+  } catch {
+    serverStatus.value = 'offline'
+  }
+}
+
 const loadMe = async () => {
   if (!localStorage.getItem('rss_token')) return
   try {
@@ -43,17 +59,6 @@ const loadMe = async () => {
     localStorage.removeItem('rss_token')
     auth.user = null
   }
-}
-
-const errorText = (error) => {
-  const detail = error.response?.data?.detail
-  if (Array.isArray(detail)) {
-    return detail.map((item) => {
-      const field = item.loc?.slice(-1)?.[0]
-      return field ? `${field}: ${item.msg}` : item.msg
-    }).join('；')
-  }
-  return detail || '请求失败，请检查服务状态。'
 }
 
 const validateAuth = () => {
@@ -112,14 +117,23 @@ const logout = async () => {
   }
 }
 
-onMounted(loadMe)
+onMounted(() => {
+  loadMe()
+  checkHealth()
+  healthTimer = setInterval(checkHealth, 20000)
+})
+
+onBeforeUnmount(() => {
+  if (healthTimer) clearInterval(healthTimer)
+})
 </script>
 
 <template>
+  <el-config-provider :locale="zhCn">
   <RouterView v-if="isEntry" />
 
   <div v-else class="workbench-shell">
-    <header class="console-header">
+    <aside class="console-sidebar">
       <RouterLink class="sidebar-brand" to="/">
         <span class="brand-mark">R</span>
         <span>
@@ -136,34 +150,37 @@ onMounted(loadMe)
         <RouterLink to="/history">审计历史</RouterLink>
         <RouterLink to="/profile">账户设置</RouterLink>
       </nav>
-
-      <el-dropdown v-if="auth.user" trigger="click">
-        <button class="account-button" type="button">
-          <span class="avatar">{{ userInitial }}</span>
-          <span>{{ auth.user.display_name || auth.user.username }}</span>
-        </button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item @click="router.push('/profile')">账户设置</el-dropdown-item>
-            <el-dropdown-item @click="router.push('/history')">审计历史</el-dropdown-item>
-            <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-
-      <div v-else class="topbar-auth">
-        <button type="button" class="text-login" @click="authMode = 'login'; authVisible = true">登录</button>
-        <el-button type="primary" @click="authMode = 'register'; authVisible = true">注册</el-button>
-      </div>
-    </header>
+    </aside>
 
     <main class="workbench-main">
       <div class="page-heading">
         <div>
           <h1>{{ route.meta.title || '机器人网络安全审计' }}</h1>
         </div>
-        <div class="sidebar-status">
-          服务在线 · <strong>127.0.0.1:8010</strong>
+
+        <div class="page-actions">
+          <div class="sidebar-status" :class="`is-${serverStatus}`">
+            {{ statusText }} · <strong>{{ apiHost }}</strong>
+          </div>
+
+          <el-dropdown v-if="auth.user" trigger="click">
+            <button class="account-button" type="button">
+              <span class="avatar">{{ userInitial }}</span>
+              <span>{{ auth.user.display_name || auth.user.username }}</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="router.push('/profile')">账户设置</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/history')">审计历史</el-dropdown-item>
+                <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+
+          <div v-else class="topbar-auth">
+            <button type="button" class="text-login" @click="authMode = 'login'; authVisible = true">登录</button>
+            <el-button type="primary" @click="authMode = 'register'; authVisible = true">注册</el-button>
+          </div>
         </div>
       </div>
 
@@ -222,4 +239,5 @@ onMounted(loadMe)
       <el-button type="primary" :loading="authLoading" class="full-button" @click="submitAuth">注册</el-button>
     </div>
   </el-dialog>
+  </el-config-provider>
 </template>

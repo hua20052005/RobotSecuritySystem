@@ -1,9 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
+import { formatTime } from '../lib/format'
 
 const router = useRouter()
 const loading = ref(false)
@@ -25,7 +25,6 @@ const profile = ref({
 const recentTasks = ref([])
 
 const initials = computed(() => (profile.value.display_name || profile.value.username || 'U').slice(0, 1).toUpperCase())
-const formatTime = (value) => value ? new Date(value).toLocaleString() : '-'
 
 const loadProfile = async () => {
   loading.value = true
