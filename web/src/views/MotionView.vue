@@ -60,6 +60,7 @@ const runRecognition = async () => {
   try {
     const { data } = await api.post('/api/motion-recognition/recognize', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000, // 识别大 pcap 可能需要数分钟，给 10 分钟上限
     })
     result.value = data
     if (data.summary?.flow_status === 'ANOMALY') {

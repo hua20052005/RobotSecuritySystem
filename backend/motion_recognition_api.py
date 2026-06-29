@@ -85,8 +85,11 @@ def health() -> Dict[str, object]:
     }
 
 
+# 注意：识别是 CPU 密集的同步计算（特征提取 + DP 扫描，大 pcap 可达数十秒到数分钟）。
+# 用普通 def 而非 async def，FastAPI 会自动在线程池中执行，避免阻塞事件循环
+# （否则识别期间整个服务都会卡住，连 /health 都无法响应）。
 @router.post("/recognize")
-async def recognize_motion_file(
+def recognize_motion_file(
     file: UploadFile = File(...),
     mode: str = Form("sequence"),
     method: str = Form("dp"),
@@ -110,7 +113,7 @@ async def recognize_motion_file(
         raise HTTPException(status_code=400, detail="method must be dp/activity/scan/scripted")
 
     run_id = uuid.uuid4().hex[:10]
-    content = await file.read()
+    content = file.file.read()
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(content)
         pcap_path = Path(tmp.name)

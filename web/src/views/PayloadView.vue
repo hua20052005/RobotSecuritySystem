@@ -108,6 +108,7 @@ const runDetection = async () => {
   try {
     const { data } = await api.post('/detect-file', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000, // 大 pcap 逐包检测可能需要数分钟
     })
     result.value = data
     await nextTick()
