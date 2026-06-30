@@ -11,7 +11,7 @@ const { fileList, selectedFile, handleChange: handleFileChange, handleRemove } =
 const loading = ref(false)
 const result = ref(null)
 
-const method = ref('dp')
+const method = ref('command')
 const minSegmentS = ref(0.25)
 const stepS = ref(0.5)
 const segmentPenalty = ref(0.02)
@@ -122,6 +122,7 @@ const exportJson = () => {
               <el-option label="DP 动态规划" value="dp" />
               <el-option label="活动片段" value="activity" />
               <el-option label="滑窗扫描" value="scan" />
+              <el-option label="指令 + 摇杆融合（推荐）" value="command" />
             </el-select>
           </label>
           <label class="control-field">

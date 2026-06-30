@@ -17,7 +17,7 @@ RECOGNIZER_ROOT = PROJECT_ROOT / "backend" / "motion_recognition"
 MODEL_PATH = PROJECT_ROOT / "models" / "motion_recognition" / "motion_model.pkl"
 PAPB_ROOT = PROJECT_ROOT / "motion" / "motion"
 PAPB_MODEL = PAPB_ROOT / "papb_trained_model.json"
-PAPB_DATASET = PAPB_ROOT / "papb_synthetic_sequences.json"
+PAPB_DATASET = PAPB_ROOT / "papb_competition_sequences.json"
 
 if str(RECOGNIZER_ROOT) not in sys.path:
     sys.path.insert(0, str(RECOGNIZER_ROOT))
@@ -92,7 +92,7 @@ def health() -> Dict[str, object]:
 def recognize_motion_file(
     file: UploadFile = File(...),
     mode: str = Form("sequence"),
-    method: str = Form("dp"),
+    method: str = Form("command"),
     transcript: Optional[str] = Form(None),
     validate_flow: bool = Form(True),
     min_segment_s: float = Form(0.25),
@@ -109,8 +109,11 @@ def recognize_motion_file(
     method = method.strip().lower()
     if mode not in {"single", "sequence"}:
         raise HTTPException(status_code=400, detail="mode must be single or sequence")
-    if method not in {"dp", "activity", "scan", "scripted"}:
-        raise HTTPException(status_code=400, detail="method must be dp/activity/scan/scripted")
+    if method not in {"dp", "activity", "scan", "scripted", "command"}:
+        raise HTTPException(
+            status_code=400,
+            detail="method must be dp/activity/scan/scripted/command",
+        )
 
     run_id = uuid.uuid4().hex[:10]
     content = file.file.read()

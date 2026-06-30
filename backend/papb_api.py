@@ -14,7 +14,7 @@ from backend.db import create_task
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PAPB_ROOT = PROJECT_ROOT / "motion" / "motion"
-DEFAULT_DATASET = PAPB_ROOT / "papb_synthetic_sequences.json"
+DEFAULT_DATASET = PAPB_ROOT / "papb_competition_sequences.json"
 DEFAULT_MODEL = PAPB_ROOT / "papb_trained_model.json"
 DEFAULT_REVIEW = PAPB_ROOT / "papb_pending_review.json"
 
@@ -24,6 +24,53 @@ if str(PAPB_ROOT) not in sys.path:
 from papb_validator import PapbValidator, add_pending_review, review_sequence  # noqa: E402
 
 router = APIRouter(prefix="/api/papb", tags=["papb"])
+
+ACTION_ALIASES = {
+    "down": "stand",
+    "up": "stand",
+    "lie_down": "stand",
+    "posture_toggle": "stand",
+    "back": "move",
+    "backward": "move",
+    "forword": "move",
+    "forward": "move",
+    "left": "move",
+    "right": "move",
+    "walk": "move",
+    "walk_slow": "move",
+    "walk_mid": "move",
+    "run_fast": "move",
+    "step": "moonwalk",
+    "twist_body": "twistBody",
+    "twistbody": "twistBody",
+    "side_jump": "twistJump",
+    "twist_jump": "twistJump",
+    "forward_jump": "jump",
+    "dance": "dance1",
+    "dance2": "dance1",
+    "站立": "stand",
+    "趴下": "stand",
+    "蹲下": "stand",
+    "移动": "move",
+    "前进": "move",
+    "后退": "move",
+    "左移": "move",
+    "右移": "move",
+    "太空步": "moonwalk",
+    "打招呼": "hello",
+    "前跳": "jump",
+    "扭身体": "twistBody",
+    "扭身跳": "twistJump",
+    "后空翻": "backflip",
+    "跳舞": "dance1",
+}
+
+
+def _canonical_action_label(value: object) -> str:
+    label = str(value).strip()
+    if not label:
+        return ""
+    return ACTION_ALIASES.get(label, ACTION_ALIASES.get(label.lower(), label))
 
 
 class ActionItem(BaseModel):
@@ -92,16 +139,20 @@ def _normalize_actions(payload: DetectRequest) -> List[Union[str, Dict[str, Any]
         normalized: List[Union[str, Dict[str, Any]]] = []
         for item in payload.actions:
             if isinstance(item, str):
-                label = item.strip()
+                label = _canonical_action_label(item)
                 if label:
                     normalized.append(label)
             else:
                 data = _model_dump(item)
-                data["label"] = data.get("label", "").strip()
+                data["label"] = _canonical_action_label(data.get("label", ""))
                 if data["label"]:
                     normalized.append(data)
         return normalized
-    return _parse_sequence_text(payload.sequence)
+    return [
+        label
+        for item in _parse_sequence_text(payload.sequence)
+        if (label := _canonical_action_label(item))
+    ]
 
 
 def _labels(actions: List[Union[str, Dict[str, Any]]]) -> List[str]:
@@ -202,7 +253,11 @@ def model_detail() -> Dict[str, Any]:
 
 @router.post("/training-sequences")
 def add_training_sequence(payload: TrainingSequenceRequest) -> Dict[str, Any]:
-    actions = [str(action).strip() for action in payload.actions if str(action).strip()]
+    actions = [
+        label
+        for action in payload.actions
+        if (label := _canonical_action_label(action))
+    ]
     if not actions:
         raise HTTPException(status_code=400, detail="请至少提供一个动作标签")
 

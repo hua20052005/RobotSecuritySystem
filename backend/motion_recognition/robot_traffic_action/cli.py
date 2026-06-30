@@ -118,12 +118,12 @@ def main() -> None:
     sequence_parser.add_argument("--output", default="sequence_results.json")
     sequence_parser.add_argument(
         "--method",
-        choices=["dp", "activity", "scripted", "scan"],
+        choices=["dp", "activity", "scripted", "scan", "command"],
         default="dp",
         help=(
             "dp guesses action order, scan classifies sliding windows, activity "
-            "uses low-traffic gaps, scripted uses a known action transcript and "
-            "optimizes boundaries."
+            "uses low-traffic gaps, command decodes learned controller events, "
+            "scripted uses a known action transcript and optimizes boundaries."
         ),
     )
     sequence_parser.add_argument(

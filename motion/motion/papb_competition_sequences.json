@@ -1,0 +1,710 @@
+{
+  "version": 1,
+  "source": "47 stable real Lite3 sequence PCAP annotations",
+  "excluded_sessions": [
+    "0615"
+  ],
+  "current_actions": [
+    "backflip",
+    "dance1",
+    "hello",
+    "jump",
+    "moonwalk",
+    "move",
+    "stand",
+    "twistBody",
+    "twistJump"
+  ],
+  "training_sequences": [
+    {
+      "id": "sequence:0613:seq08_basic_showcase",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "hello",
+        "move",
+        "backflip"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq08_basic_showcase2",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "hello",
+        "move",
+        "backflip"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq09_motion_showcase",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "jump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq09_motion_showcase2",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "jump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq1",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq10",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "twistBody",
+        "twistJump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq10_twist_showcase",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "twistBody",
+        "twistJump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq10_twist_showcase2",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "twistBody",
+        "twistJump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq11",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "hello",
+        "twistBody",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq11_mixed_showcase",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "hello",
+        "twistBody",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq11_mixed_showcase2",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "hello",
+        "twistBody",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq12",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "stand",
+        "stand",
+        "stand",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq12_stand_sit_equivalence",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "stand",
+        "stand",
+        "stand",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq12_stand_sit_equivalence2",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "stand",
+        "stand",
+        "stand",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq13",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "move",
+        "move",
+        "move",
+        "move",
+        "move",
+        "move",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq13_direction_equivalence",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "move",
+        "move",
+        "move",
+        "move",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0613:seq13_direction_equivalence2",
+      "session": "0613",
+      "actions": [
+        "stand",
+        "move",
+        "move",
+        "move",
+        "move",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq16",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "move",
+        "backflip",
+        "move",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq17",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "backflip",
+        "moonwalk",
+        "move",
+        "twistJump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq18",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "hello",
+        "hello",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq19",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "move",
+        "stand",
+        "stand",
+        "move",
+        "stand",
+        "stand",
+        "move",
+        "move",
+        "move",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq2",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "twistBody"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq20",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "hello",
+        "jump",
+        "moonwalk",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq21",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "twistBody",
+        "twistJump",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq22",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "stand",
+        "move",
+        "moonwalk",
+        "move",
+        "jump",
+        "hello"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq3",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "stand",
+        "moonwalk",
+        "move"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq4",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "twistBody",
+        "moonwalk"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq5",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "backflip"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq6",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "twistBody",
+        "moonwalk",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0524:seq7",
+      "session": "0524",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "move",
+        "move",
+        "twistBody"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq8",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "hello",
+        "move",
+        "move"
+      ]
+    },
+    {
+      "id": "sequence:0610:seq9",
+      "session": "0610",
+      "actions": [
+        "stand",
+        "jump",
+        "stand",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629_early:pilot_seq01_01",
+      "session": "0629_early",
+      "actions": [
+        "stand",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629_early:pilot_seq01_02",
+      "session": "0629_early",
+      "actions": [
+        "stand",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq1_1",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq1_2",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq1_3",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "hello",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq2_1",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "jump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq2_2",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "jump",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq3_1",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "twistBody",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq3_2",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "twistBody",
+        "stand"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq4_1",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "twistBody",
+        "twistJump"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq4_2",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "stand",
+        "twistBody",
+        "twistJump"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq5_1",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "hello"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq5_2",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "moonwalk",
+        "hello"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq6_1",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "dance1",
+        "move"
+      ]
+    },
+    {
+      "id": "sequence:0629:seq6_2",
+      "session": "0629",
+      "actions": [
+        "stand",
+        "dance1",
+        "move"
+      ]
+    }
+  ],
+  "normal_templates": [
+    [
+      "stand",
+      "hello",
+      "move",
+      "backflip"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "jump",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "twistJump",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "hello",
+      "twistBody",
+      "stand"
+    ],
+    [
+      "stand",
+      "stand",
+      "stand",
+      "stand",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "move",
+      "move",
+      "move",
+      "move",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "move",
+      "move",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "backflip",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "backflip",
+      "moonwalk",
+      "move",
+      "twistJump",
+      "stand"
+    ],
+    [
+      "stand",
+      "hello",
+      "hello",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "stand",
+      "stand",
+      "move",
+      "stand",
+      "stand",
+      "move",
+      "move",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "twistBody"
+    ],
+    [
+      "stand",
+      "hello",
+      "jump",
+      "moonwalk",
+      "stand"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "twistJump",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "stand",
+      "move",
+      "moonwalk",
+      "move",
+      "jump",
+      "hello"
+    ],
+    [
+      "stand",
+      "stand",
+      "moonwalk",
+      "move"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "moonwalk"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "backflip"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "moonwalk",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "move",
+      "move",
+      "twistBody"
+    ],
+    [
+      "stand",
+      "hello",
+      "move",
+      "move"
+    ],
+    [
+      "stand",
+      "jump",
+      "stand",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "jump",
+      "stand"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "stand"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "twistJump"
+    ],
+    [
+      "stand",
+      "stand",
+      "twistBody",
+      "twistJump"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "hello"
+    ],
+    [
+      "stand",
+      "dance1",
+      "move"
+    ]
+  ],
+  "noncritical_actions": [
+    "stand",
+    "move"
+  ],
+  "max_edit_distance": 1,
+  "max_error_ratio": 0.25
+}

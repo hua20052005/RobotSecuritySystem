@@ -5,6 +5,7 @@ import json
 import pickle
 import socket
 import struct
+from math import ceil
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -115,6 +116,93 @@ ACTION_ALIASES = {
     "left": "walk",
 }
 
+MOVEMENT_ACTION_LABEL = "move"
+MOVEMENT_ACTION_ALIASES = frozenset(
+    {"back", "backward", "forword", "forward", "right", "left"}
+)
+CANONICAL_ACTION_ALIASES = {
+    "step": "moonwalk",
+}
+
+
+def canonical_action_label(label: object) -> str:
+    value = str(label).strip()
+    if value.lower() in MOVEMENT_ACTION_ALIASES:
+        return MOVEMENT_ACTION_LABEL
+    return CANONICAL_ACTION_ALIASES.get(value.lower(), value)
+
+
+def _canonical_probabilities(proba: dict[str, float]) -> dict[str, float]:
+    merged: defaultdict[str, float] = defaultdict(float)
+    for label, probability in proba.items():
+        merged[canonical_action_label(label)] += float(probability)
+    return dict(sorted(merged.items()))
+
+
+def _canonicalize_prediction(
+    result: dict[str, object] | None,
+    *,
+    label_key: str,
+) -> dict[str, object] | None:
+    if result is None or not result.get(label_key):
+        return result
+    raw_label = str(result[label_key])
+    canonical_label = canonical_action_label(raw_label)
+    if canonical_label != raw_label:
+        result[f"raw_{label_key}"] = raw_label
+
+    raw_proba = result.get("proba")
+    if isinstance(raw_proba, dict):
+        canonical_proba = _canonical_probabilities(raw_proba)
+        if canonical_proba:
+            canonical_label, confidence = max(
+                canonical_proba.items(),
+                key=lambda item: item[1],
+            )
+            result["proba"] = canonical_proba
+            result["confidence"] = float(confidence)
+
+    if canonical_label != raw_label:
+        result.setdefault(f"raw_{label_key}", raw_label)
+    result[label_key] = canonical_label
+    return result
+
+
+def _canonicalize_sequence_result(result: dict[str, object]) -> dict[str, object]:
+    raw_actions = result.get("actions")
+    if not isinstance(raw_actions, list):
+        return result
+
+    actions: list[dict[str, object]] = []
+    for raw_item in raw_actions:
+        if not isinstance(raw_item, dict):
+            continue
+        item = dict(raw_item)
+        _canonicalize_prediction(item, label_key="label")
+        if item.get("label") != MOVEMENT_ACTION_LABEL:
+            actions.append(item)
+            continue
+
+        raw_label = str(item.get("raw_label") or item["label"])
+        if actions and actions[-1].get("label") == MOVEMENT_ACTION_LABEL:
+            previous = actions[-1]
+            raw_labels = list(previous.get("raw_labels") or [])
+            for value in (previous.get("raw_label"), raw_label):
+                if value and value not in raw_labels:
+                    raw_labels.append(str(value))
+            previous["raw_labels"] = raw_labels
+            if item.get("t_end_s") is not None:
+                previous["t_end_s"] = item["t_end_s"]
+            if previous.get("t_start_s") is not None and previous.get("t_end_s") is not None:
+                previous["duration_s"] = float(previous["t_end_s"]) - float(previous["t_start_s"])
+            continue
+
+        item["raw_labels"] = [raw_label]
+        actions.append(item)
+
+    result["actions"] = actions
+    return result
+
 
 @dataclass(frozen=True)
 class MotionTemplate:
@@ -150,6 +238,7 @@ class MotionModel:
     traffic_model: object | None = None
     amnar_window_s: float = 2.5
     amnar_window_step_s: float = 1.0
+    controller_command_map: dict[str, str] | None = None
 
 
 def read_pcap_packets(path: str | Path):
@@ -356,6 +445,216 @@ def payload_feature_vector(
     ).astype(np.float32)
 
 
+def learn_controller_command_map(
+    data_dir: str | Path,
+    *,
+    payload_len: int = 12,
+    min_label_support: float = 0.6,
+    duplicate_window_s: float = 0.2,
+    max_occurrences_per_file: int = 4,
+) -> tuple[dict[str, str], dict[str, object]]:
+    by_label: defaultdict[str, list[dict[str, list[float]]]] = defaultdict(list)
+    for label, path in iter_pcaps(data_dir):
+        if path.suffix.lower() != ".pcap":
+            continue
+        first_ts = None
+        payload_times: defaultdict[str, list[float]] = defaultdict(list)
+        for ts, _, frame in read_pcap_packets(path):
+            if first_ts is None:
+                first_ts = ts
+            meta = parse_ipv4_packet(frame)
+            if not meta or meta.get("proto") != 17:
+                continue
+            payload = bytes(meta.get("udp_payload", b""))
+            if len(payload) != payload_len:
+                continue
+            payload_times[payload.hex()].append(ts - first_ts)
+        by_label[str(label)].append(dict(payload_times))
+
+    label_support: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    burst_support: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    occurrence_counts: defaultdict[str, defaultdict[str, list[int]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for label, files in by_label.items():
+        for payload_times in files:
+            for payload_hex, times in payload_times.items():
+                label_support[label][payload_hex] += 1
+                occurrence_counts[label][payload_hex].append(len(times))
+                if any(
+                    right - left <= duplicate_window_s
+                    for left, right in zip(times, times[1:])
+                ):
+                    burst_support[label][payload_hex] += 1
+
+    command_map: dict[str, str] = {}
+    rows = []
+    for label, files in sorted(by_label.items()):
+        required = max(2, ceil(len(files) * min_label_support))
+        candidates = []
+        for payload_hex, support in label_support[label].items():
+            other_support = sum(
+                supports.get(payload_hex, 0)
+                for other_label, supports in label_support.items()
+                if other_label != label
+            )
+            counts = occurrence_counts[label][payload_hex]
+            median_count = float(np.median(counts)) if counts else 0.0
+            bursts = int(burst_support[label][payload_hex])
+            if (
+                support >= required
+                and bursts >= required
+                and other_support == 0
+                and median_count <= max_occurrences_per_file
+            ):
+                candidates.append(
+                    {
+                        "payload_hex": payload_hex,
+                        "support": int(support),
+                        "burst_support": bursts,
+                        "median_occurrences": median_count,
+                    }
+                )
+        candidates.sort(
+            key=lambda item: (
+                -int(item["support"]),
+                abs(float(item["median_occurrences"]) - 2.0),
+                str(item["payload_hex"]),
+            )
+        )
+        if candidates:
+            command_map[str(candidates[0]["payload_hex"])] = canonical_action_label(label)
+        rows.append(
+            {
+                "label": label,
+                "files": len(files),
+                "required_support": required,
+                "candidates": candidates,
+                "selected": candidates[0]["payload_hex"] if candidates else None,
+            }
+        )
+    return command_map, {
+        "payload_len": payload_len,
+        "duplicate_window_s": duplicate_window_s,
+        "signatures": command_map,
+        "rows": rows,
+    }
+
+
+def predict_controller_command_sequence(
+    model: MotionModel,
+    pcap_path: str | Path,
+    *,
+    dedupe_window_s: float = 0.5,
+    joystick_gap_s: float = 0.6,
+    joystick_min_packets: int = 20,
+    joystick_min_duration_s: float = 0.25,
+) -> dict[str, object]:
+    command_map = dict(getattr(model, "controller_command_map", None) or {})
+    if not command_map:
+        return {
+            "status": "NO_COMMAND_MAP",
+            "pcap_file": str(pcap_path),
+            "method": "controller_command",
+            "actions": [],
+        }
+
+    first_ts = None
+    raw_events = []
+    joystick_packets: list[float] = []
+    for ts, _, frame in read_pcap_packets(pcap_path):
+        if first_ts is None:
+            first_ts = ts
+        meta = parse_ipv4_packet(frame)
+        if not meta or meta.get("proto") != 17:
+            continue
+        payload = bytes(meta.get("udp_payload", b""))
+        payload_hex = payload.hex()
+        label = command_map.get(payload_hex)
+        if label is not None:
+            raw_events.append(
+                {
+                    "label": label,
+                    "status": "NORMAL",
+                    "confidence": 1.0,
+                    "t_start_s": float(ts - first_ts),
+                    "t_end_s": float(ts - first_ts),
+                    "duration_s": 0.0,
+                    "payload_hex": payload_hex,
+                    "src": meta.get("src"),
+                    "dst": meta.get("dst"),
+                    "src_port": meta.get("src_port"),
+                    "dst_port": meta.get("dst_port"),
+                    "source": "fixed_signature",
+                }
+            )
+        if (
+            meta.get("dst_port") == 43893
+            and len(payload) == 12
+            and payload[0] in {0x30, 0x31}
+        ):
+            joystick_packets.append(float(ts - first_ts))
+
+    actions = []
+    for event in raw_events:
+        if (
+            actions
+            and event["label"] == actions[-1]["label"]
+            and float(event["t_start_s"]) - float(actions[-1]["t_start_s"])
+            <= dedupe_window_s
+        ):
+            actions[-1]["duplicate_packets"] = int(actions[-1].get("duplicate_packets", 1)) + 1
+            actions[-1]["t_end_s"] = event["t_end_s"]
+            continue
+        event["duplicate_packets"] = 1
+        actions.append(event)
+
+    joystick_segments: list[list[float]] = []
+    for event_time in joystick_packets:
+        if (
+            not joystick_segments
+            or event_time - joystick_segments[-1][-1] > joystick_gap_s
+        ):
+            joystick_segments.append([event_time])
+        else:
+            joystick_segments[-1].append(event_time)
+    for segment in joystick_segments:
+        start = segment[0]
+        end = segment[-1]
+        if (
+            len(segment) < joystick_min_packets
+            or end - start < joystick_min_duration_s
+        ):
+            continue
+        actions.append(
+            {
+                "label": MOVEMENT_ACTION_LABEL,
+                "status": "NORMAL",
+                "confidence": 1.0,
+                "t_start_s": start,
+                "t_end_s": end,
+                "duration_s": end - start,
+                "packet_count": len(segment),
+                "source": "joystick_0x30_0x31",
+            }
+        )
+
+    actions.sort(key=lambda item: float(item["t_start_s"]))
+    result = {
+        "status": "OK" if actions else "NO_COMMAND_EVENTS",
+        "pcap_file": str(pcap_path),
+        "method": "controller_command_with_joystick",
+        "dedupe_window_s": dedupe_window_s,
+        "joystick_gap_s": joystick_gap_s,
+        "actions": actions,
+        "raw_event_count": len(raw_events),
+        "joystick_segment_count": sum(
+            1 for action in actions if action.get("source") == "joystick_0x30_0x31"
+        ),
+    }
+    return _canonicalize_sequence_result(result)
+
+
 def train_amnar_payload_model(
     data_dir: str | Path,
     *,
@@ -535,7 +834,7 @@ def predict_amnar_payload(
         classes = [str(cls) for cls in model.amnar_model.classes_]
         result["confidence"] = float(max(probs))
         result["proba"] = dict(sorted((label, float(prob)) for label, prob in zip(classes, probs)))
-    return result
+    return _canonicalize_prediction(result, label_key="predicted")
 
 
 def predict_traffic_profile(
@@ -553,7 +852,7 @@ def predict_traffic_profile(
         classes = [str(cls) for cls in classifier.classes_]
         result["confidence"] = float(max(probs))
         result["proba"] = dict(sorted((label, float(prob)) for label, prob in zip(classes, probs)))
-    return result
+    return _canonicalize_prediction(result, label_key="predicted")
 
 
 def extract_window_features(
@@ -791,6 +1090,7 @@ def train_motion_model(
     amnar_window_model = None
     amnar_report = None
     amnar_window_report = None
+    controller_command_map, controller_command_report = learn_controller_command_map(data_dir)
     traffic_model, traffic_report = train_traffic_profile_model(by_sample, feature_columns)
     if train_amnar and discovered_control_flows:
         amnar_model, amnar_labels, amnar_durations, amnar_report = train_amnar_payload_model(
@@ -821,6 +1121,7 @@ def train_motion_model(
         amnar_durations=amnar_durations,
         amnar_window_model=amnar_window_model,
         traffic_model=traffic_model,
+        controller_command_map=controller_command_map,
     )
     report = _training_report(
         all_rows=all_rows,
@@ -833,6 +1134,7 @@ def train_motion_model(
         amnar_window_report=amnar_window_report,
         traffic_report=traffic_report,
     )
+    report["controller_command_report"] = controller_command_report
     return model, report
 
 
@@ -860,8 +1162,10 @@ def predict_motion_pcap(
     signal_result = None
     if model.signal_model is not None:
         signal_result = predict_signal_pcap(model.signal_model, pcap_path)
+        _canonicalize_prediction(signal_result, label_key="predicted")
     amnar_result = predict_amnar_payload(model, pcap_path)
     traffic_result = predict_traffic_profile(model, rows)
+    _canonicalize_prediction(motion_result, label_key="label")
 
     if amnar_result:
         final_label = amnar_result["predicted"]
@@ -918,6 +1222,37 @@ def predict_action_sequence(
     gap_windows: int = 5,
     active_quantile: float = 0.25,
 ) -> dict[str, object]:
+    result = _predict_action_sequence_raw(
+        model,
+        pcap_path,
+        method=method,
+        transcript=transcript,
+        min_segment_s=min_segment_s,
+        max_segment_s=max_segment_s,
+        step_s=step_s,
+        segment_penalty=segment_penalty,
+        gap_windows=gap_windows,
+        active_quantile=active_quantile,
+    )
+    return _canonicalize_sequence_result(result)
+
+
+def _predict_action_sequence_raw(
+    model: MotionModel,
+    pcap_path: str | Path,
+    *,
+    method: str = "dp",
+    transcript: list[str] | None = None,
+    min_segment_s: float = 0.25,
+    max_segment_s: float | None = None,
+    step_s: float = 0.5,
+    segment_penalty: float = 0.02,
+    gap_windows: int = 5,
+    active_quantile: float = 0.25,
+) -> dict[str, object]:
+    if method == "command":
+        return predict_controller_command_sequence(model, pcap_path)
+
     if method == "scan":
         if model.amnar_model is None:
             return {
@@ -1571,6 +1906,8 @@ def compare_models(
         if path.suffix.lower() != ".pcap":
             continue
         pred = predict_motion_pcap(model, path, signal_fusion=signal_fusion)
+        raw_truth = label
+        label = canonical_action_label(label)
         motion_label = pred.get("motion", {}).get("label")
         amnar_label = (pred.get("amnar") or {}).get("predicted")
         traffic_label = (pred.get("traffic") or {}).get("predicted")
@@ -1579,6 +1916,7 @@ def compare_models(
             {
                 "file": str(path),
                 "truth": label,
+                "raw_truth": raw_truth,
                 "motion_label": motion_label,
                 "motion_status": pred.get("motion", {}).get("status"),
                 "motion_similarity": pred.get("motion", {}).get("similarity"),
@@ -1663,8 +2001,20 @@ def save_motion_model(model: MotionModel, path: str | Path) -> None:
 
 
 def load_motion_model(path: str | Path) -> MotionModel:
-    with Path(path).open("rb") as f:
-        return pickle.load(f)
+    model_path = Path(path)
+    with model_path.open("rb") as f:
+        model = pickle.load(f)
+    command_map_path = model_path.with_name("controller_command_map.json")
+    if command_map_path.exists():
+        with command_map_path.open("r", encoding="utf-8") as f:
+            profile = json.load(f)
+        signatures = profile.get("signatures", profile) if isinstance(profile, dict) else {}
+        if isinstance(signatures, dict):
+            model.controller_command_map = {
+                str(payload_hex).lower(): canonical_action_label(label)
+                for payload_hex, label in signatures.items()
+            }
+    return model
 
 
 def write_training_outputs(model: MotionModel, report: dict[str, object], out_dir: str | Path) -> None:

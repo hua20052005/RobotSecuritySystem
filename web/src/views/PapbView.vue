@@ -5,7 +5,7 @@ import api from '../api/client'
 import { downloadText, downloadJson } from '../lib/download'
 import { errorText } from '../lib/http-error'
 
-const sequenceText = ref('start, inspect_area, pick_tool, grind_beans, prepare_filter, boil_water, pour_water, serve, clean_tool, shutdown')
+const sequenceText = ref('stand, hello, stand')
 const autoReview = ref(true)
 const requireTerminal = ref(true)
 const saveHistory = ref(true)
@@ -24,7 +24,7 @@ const retrainForm = reactive({
   critical_min_support: 0.8,
   max_edit_distance: 1,
   max_error_ratio: 0,
-  noncritical_actions: 'prepare_filter, stir, clean_tool',
+  noncritical_actions: 'stand, move',
 })
 const newTrainingText = ref('')
 
@@ -310,14 +310,14 @@ onMounted(refreshAll)
       <div class="action-row">
         <input ref="uploadInput" type="file" accept=".json,.txt,.csv" hidden @change="loadUpload" />
         <el-button @click="uploadInput?.click()">上传识别结果</el-button>
-        <el-button @click="useExample(['start', 'pick_cup', 'boil_water', 'prepare_filter', 'pour_water', 'serve', 'shutdown'])">正常示例</el-button>
-        <el-button @click="useExample(['start', 'pick_cup', 'grind_beans', 'prepare_filter', 'pour_water', 'serve', 'shutdown'])">异常示例</el-button>
+        <el-button @click="useExample(['stand', 'dance1', 'move'])">正常示例</el-button>
+        <el-button @click="useExample(['backflip', 'backflip', 'backflip'])">异常示例</el-button>
       </div>
     </div>
 
     <div class="papb-layout mt-18">
       <div class="papb-input-block">
-        <el-input v-model="sequenceText" type="textarea" :rows="8" placeholder="start, inspect_area, pick_tool, ... 或 start -> inspect_area -> pick_tool" />
+          <el-input v-model="sequenceText" type="textarea" :rows="8" placeholder="stand, hello, stand 或 stand -> moonwalk -> hello" />
         <div class="action-row">
           <el-checkbox v-model="autoReview">UNKNOWN 自动进入待审核池</el-checkbox>
           <el-checkbox v-model="requireTerminal">要求到达终止动作</el-checkbox>
@@ -502,7 +502,7 @@ onMounted(refreshAll)
       <div class="papb-train-form">
         <label>
           <span>新增正常训练序列</span>
-          <el-input v-model="newTrainingText" type="textarea" :rows="3" placeholder="start, action_a, action_b, shutdown" />
+          <el-input v-model="newTrainingText" type="textarea" :rows="3" placeholder="stand, twistBody, twistJump, stand" />
         </label>
         <div class="action-row">
           <el-button @click="addTrainingSequence">加入训练数据</el-button>
