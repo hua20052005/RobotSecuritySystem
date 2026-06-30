@@ -28,7 +28,8 @@ class PapbContextPredictionTests(unittest.TestCase):
         self.assertGreaterEqual(len(model["context_transitions"]), 100)
         self.assertEqual(len(model["embedding_centers"]), 9)
         self.assertEqual(model["embedding_kind"], "transition_context")
-        self.assertEqual(len(model["forbidden_transitions"]), 6)
+        self.assertEqual(len(model["forbidden_transitions"]), 2)
+        self.assertEqual(len(model["scenario_rules"]), 4)
 
     def test_context_predicts_twist_jump(self):
         result = self.validator.predict_next_actions(["stand", "twistBody"])
@@ -50,12 +51,27 @@ class PapbContextPredictionTests(unittest.TestCase):
         )
         self.assertEqual(result["actual"]["decision"], "NORMAL")
 
-    def test_unseen_context_action_is_anomaly(self):
+    def test_unseen_known_action_is_deviation(self):
         result = self.validator.predict_next_actions(
             ["stand", "twistBody"],
             actual_action="backflip",
         )
+        self.assertEqual(result["actual"]["decision"], "DEVIATION")
+
+    def test_scenario_rule_detects_patrol_intrusion(self):
+        result = self.validator.predict_next_actions(
+            ["stand", "move"],
+            actual_action="dance1",
+            scenario="patrol",
+        )
         self.assertEqual(result["actual"]["decision"], "ANOMALY")
+
+    def test_realistic_twist_to_move_sequence_is_normal(self):
+        result = self.validator.validate_sequence(
+            ["stand", "twistBody", "move", "stand"],
+            scenario="general",
+        )
+        self.assertEqual(result["status"], "NORMAL")
 
     def test_forbidden_transition_overrides_probability(self):
         result = self.validator.predict_next_actions(

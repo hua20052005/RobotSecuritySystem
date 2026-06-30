@@ -610,88 +610,110 @@
       "source": "expert_augmented",
       "scene": "招手后跳跃展示",
       "actions": ["stand", "hello", "jump", "stand"]
+    },
+    {
+      "id": "expert:twist_move_recover",
+      "source": "expert_augmented",
+      "scene": "扭身动作结束后继续移动",
+      "actions": ["stand", "twistBody", "move", "stand"]
     }
   ],
   "evaluation_sequences": [
     {
+      "id": "eval:normal_general_twist_move",
+      "expected_status": "NORMAL",
+      "scenario": "general",
+      "actions": ["stand", "twistBody", "move", "stand"]
+    },
+    {
       "id": "eval:normal_patrol_greet",
       "expected_status": "NORMAL",
+      "scenario": "patrol",
       "actions": ["stand", "move", "hello", "stand"]
     },
     {
-      "id": "eval:normal_move_jump",
+      "id": "eval:normal_patrol_jump",
       "expected_status": "NORMAL",
+      "scenario": "patrol",
       "actions": ["stand", "move", "jump", "stand"]
     },
     {
-      "id": "eval:normal_twist_jump",
+      "id": "eval:normal_interaction",
       "expected_status": "NORMAL",
-      "actions": ["stand", "twistBody", "twistJump", "stand"]
-    },
-    {
-      "id": "eval:normal_moonwalk_greet",
-      "expected_status": "NORMAL",
+      "scenario": "interaction",
       "actions": ["stand", "moonwalk", "hello", "stand"]
     },
     {
-      "id": "eval:normal_backflip_recovery",
+      "id": "eval:normal_performance",
       "expected_status": "NORMAL",
+      "scenario": "performance",
       "actions": ["stand", "move", "backflip", "move", "stand"]
     },
     {
-      "id": "eval:normal_dance_recovery",
-      "expected_status": "NORMAL",
-      "actions": ["stand", "dance1", "move", "stand"]
+      "id": "eval:general_unseen_safe_combination",
+      "expected_status": "UNKNOWN_VALIDITY",
+      "scenario": "general",
+      "actions": ["stand", "dance1", "hello", "stand"]
     },
     {
-      "id": "eval:unknown_safe_recombination",
-      "expected_status": "UNKNOWN_VALIDITY",
-      "actions": ["stand", "move", "moonwalk", "hello", "stand"]
+      "id": "eval:general_mid_capture",
+      "expected_status": "NORMAL_WITH_TOLERANCE",
+      "scenario": "general",
+      "actions": ["move", "hello", "stand"]
     },
     {
-      "id": "eval:unknown_incomplete_but_plausible",
+      "id": "eval:general_incomplete",
       "expected_status": "UNKNOWN_VALIDITY",
+      "scenario": "general",
       "actions": ["stand", "move", "hello"]
     },
     {
       "id": "eval:forbidden_double_backflip",
       "expected_status": "ANOMALY",
+      "scenario": "general",
       "actions": ["stand", "backflip", "backflip", "stand"]
     },
     {
       "id": "eval:forbidden_double_twist_jump",
       "expected_status": "ANOMALY",
+      "scenario": "general",
       "actions": ["stand", "twistBody", "twistJump", "twistJump", "stand"]
     },
     {
-      "id": "eval:forbidden_backflip_to_twist_jump",
+      "id": "eval:unknown_action",
       "expected_status": "ANOMALY",
-      "actions": ["stand", "backflip", "twistJump", "stand"]
+      "scenario": "general",
+      "actions": ["stand", "unknown_command", "stand"]
     },
     {
-      "id": "eval:forbidden_twist_jump_to_backflip",
+      "id": "eval:patrol_dance_intrusion",
       "expected_status": "ANOMALY",
-      "actions": ["stand", "twistBody", "twistJump", "backflip", "stand"]
+      "scenario": "patrol",
+      "actions": ["stand", "move", "dance1", "stand"]
     },
     {
-      "id": "eval:forbidden_jump_to_backflip",
+      "id": "eval:patrol_backflip_intrusion",
       "expected_status": "ANOMALY",
-      "actions": ["stand", "jump", "backflip", "stand"]
+      "scenario": "patrol",
+      "actions": ["stand", "move", "backflip", "stand"]
     },
     {
-      "id": "eval:forbidden_dance_to_backflip",
+      "id": "eval:patrol_moonwalk_intrusion",
       "expected_status": "ANOMALY",
-      "actions": ["stand", "dance1", "backflip", "stand"]
+      "scenario": "patrol",
+      "actions": ["stand", "move", "moonwalk", "stand"]
     },
     {
-      "id": "eval:invalid_start",
+      "id": "eval:interaction_backflip_intrusion",
       "expected_status": "ANOMALY",
-      "actions": ["move", "hello", "stand"]
+      "scenario": "interaction",
+      "actions": ["stand", "hello", "backflip", "stand"]
     },
     {
-      "id": "eval:unknown_transition",
+      "id": "eval:interaction_twist_jump_intrusion",
       "expected_status": "ANOMALY",
-      "actions": ["stand", "dance1", "hello", "stand"]
+      "scenario": "interaction",
+      "actions": ["stand", "twistBody", "twistJump", "stand"]
     }
   ],
   "normal_templates": [
@@ -909,32 +931,35 @@
       "to": "twistJump",
       "rule": "扭身跳后必须恢复姿态，禁止连续扭身跳",
       "score": 0.98
-    },
-    {
-      "from": "backflip",
-      "to": "twistJump",
-      "rule": "高冲击后空翻后不能直接衔接扭身跳",
-      "score": 0.96
-    },
-    {
-      "from": "twistJump",
-      "to": "backflip",
-      "rule": "扭身跳落地后不能直接衔接后空翻",
-      "score": 0.96
-    },
-    {
-      "from": "jump",
-      "to": "backflip",
-      "rule": "普通跳跃后应先恢复姿态再执行后空翻",
-      "score": 0.94
-    },
-    {
-      "from": "dance1",
-      "to": "backflip",
-      "rule": "舞蹈动作结束后应先恢复再执行后空翻",
-      "score": 0.93
     }
   ],
+  "max_repeats": {
+    "stand": 8,
+    "move": 20,
+    "hello": 4,
+    "moonwalk": 3,
+    "dance1": 3,
+    "twistBody": 3,
+    "jump": 2,
+    "twistJump": 1,
+    "backflip": 1
+  },
+  "scenario_rules": {
+    "general": {
+      "description": "自由操控与通用演示；已知动作的罕见组合只提示偏移"
+    },
+    "patrol": {
+      "description": "巡逻与移动任务",
+      "allowed_actions": ["stand", "move", "hello", "jump"]
+    },
+    "interaction": {
+      "description": "低冲击交互展示",
+      "allowed_actions": ["stand", "move", "hello", "moonwalk", "dance1", "twistBody"]
+    },
+    "performance": {
+      "description": "完整动作表演；允许全部已知动作"
+    }
+  },
   "context_max_order": 3,
   "transition_risk_threshold": 0.08,
   "max_edit_distance": 1,

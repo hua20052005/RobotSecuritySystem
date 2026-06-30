@@ -1,42 +1,103 @@
 <script setup>
 import { inject } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  ArrowRight,
+  Connection,
+  DataAnalysis,
+  Lock,
+} from '@element-plus/icons-vue'
+
+import robotDogHero from '../assets/robot-dog-hero.png'
 
 const router = useRouter()
 const openAuth = inject('openAuth')
 
-const features = ['侧信道分析', 'ET-BERT 双粒度检测', '动作序列识别', 'PAPB 流程校验']
+const modules = [
+  {
+    title: '侧信道流量分析',
+    description: '从包长、方向和时间行为中定位可疑通信模式。',
+    route: '/side-channel',
+    icon: DataAnalysis,
+    tone: 'cyan',
+    index: '01',
+  },
+  {
+    title: '通信载荷检测',
+    description: '使用 ET-BERT 双粒度模型检查流量与报文异常。',
+    route: '/payload',
+    icon: Lock,
+    tone: 'coral',
+    index: '02',
+  },
+  {
+    title: '动作序列分析',
+    description: '识别机器狗动作，并检查上下文转移与流程一致性。',
+    route: '/motion',
+    icon: Connection,
+    tone: 'green',
+    index: '03',
+  },
+]
 </script>
 
 <template>
   <main class="home">
-    <!-- 缓慢漂浮的极光光晕（纯装饰，置于内容下层） -->
-    <div class="home-aurora" aria-hidden="true">
-      <span class="home-grid"></span>
-      <span class="home-ring"></span>
-      <span class="blob blob-a"></span>
-      <span class="blob blob-b"></span>
-      <span class="blob blob-c"></span>
-    </div>
-
-    <section class="home-hero">
-      <span class="home-kicker">Robot Security System</span>
-      <div class="home-title-wrap">
-        <h1>机器人控制流量审计台</h1>
+    <header class="home-nav">
+      <RouterLink class="home-brand" to="/">
+        <span class="home-brand-mark">R</span>
+        <span><strong>RobotSec</strong><small>Security Console</small></span>
+      </RouterLink>
+      <div class="home-nav-actions">
+        <button type="button" @click="openAuth?.('login')">登录</button>
+        <el-button type="primary" @click="router.push('/side-channel')">进入工作台</el-button>
       </div>
-      <p>
-        面向比赛演示与本地复核的安全分析工具。把侧信道、ET-BERT 双粒度检测、运动时序和 PAPB
-        流程校验放进同一个工作台，从一份流量证据追到具体异常。
-      </p>
-      <div class="home-actions">
-        <el-button type="primary" size="large" @click="router.push('/side-channel')">
-          开始分析
-        </el-button>
-        <el-button size="large" @click="openAuth?.('login')">登录</el-button>
+    </header>
+
+    <section class="home-hero" :style="{ backgroundImage: `url(${robotDogHero})` }">
+      <div class="hero-copy">
+        <span class="hero-kicker"><i></i> Robot traffic intelligence</span>
+        <h1>机器人控制流量<br>安全审计系统</h1>
+        <p>把通信侧信道、载荷内容和动作时序放入一条清晰的审计链路，从原始抓包追踪到可解释的异常证据。</p>
+        <div class="hero-actions">
+          <el-button type="primary" size="large" @click="router.push('/side-channel')">
+            开始分析
+            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          </el-button>
+          <button class="text-action" type="button" @click="router.push('/motion')">查看动作序列模块</button>
+        </div>
       </div>
 
-      <div class="home-modules">
-        <span v-for="f in features" :key="f">{{ f }}</span>
+      <div class="hero-status">
+        <span class="status-pulse"></span>
+        <div><strong>审计节点已就绪</strong><small>Local analysis pipeline</small></div>
+      </div>
+    </section>
+
+    <section class="module-section">
+      <div class="module-heading">
+        <div>
+          <span>核心模块</span>
+          <h2>从流量到行为的三层检测</h2>
+        </div>
+        <p>按需进入任一模块，也可以沿侧信道、载荷、动作序列的顺序完成整套分析。</p>
+      </div>
+
+      <div class="module-grid">
+        <button
+          v-for="item in modules"
+          :key="item.route"
+          type="button"
+          class="module-card"
+          :class="`is-${item.tone}`"
+          @click="router.push(item.route)"
+        >
+          <span class="module-index">{{ item.index }}</span>
+          <span class="module-icon"><el-icon><component :is="item.icon" /></el-icon></span>
+          <strong>{{ item.title }}</strong>
+          <small>{{ item.description }}</small>
+          <span class="module-enter">进入模块 <el-icon><ArrowRight /></el-icon></span>
+        </button>
       </div>
     </section>
   </main>
@@ -44,307 +105,367 @@ const features = ['侧信道分析', 'ET-BERT 双粒度检测', '动作序列识
 
 <style scoped>
 .home {
-  position: relative;
   min-height: 100vh;
+  padding: 0 clamp(18px, 4vw, 64px) 64px;
+  background: #eaf0f3;
+}
+
+.home-nav {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at top, rgba(30, 90, 168, 0.12), transparent 34%),
-    radial-gradient(circle at 80% 15%, rgba(15, 118, 110, 0.1), transparent 26%),
-    linear-gradient(180deg, #f8fbff 0%, #f4f7fb 100%);
+  justify-content: space-between;
+  min-height: 82px;
+  max-width: 1440px;
+  margin: 0 auto;
 }
 
-/* ── 氛围背景：三团缓慢漂浮、模糊的色光 ── */
-.home-aurora {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.home-grid {
-  position: absolute;
-  inset: -10%;
-  background-image:
-    linear-gradient(rgba(30, 90, 168, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30, 90, 168, 0.05) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: radial-gradient(circle at center, black 42%, transparent 82%);
-  opacity: 0.45;
-  transform: perspective(1200px) rotateX(64deg) translateY(16%);
-  transform-origin: center top;
-  animation: grid-drift 22s linear infinite;
-}
-
-.home-ring {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: min(72vw, 760px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -48%);
-  border-radius: 50%;
-  border: 1px solid rgba(30, 90, 168, 0.14);
-  box-shadow:
-    inset 0 0 40px rgba(30, 90, 168, 0.08),
-    0 0 120px rgba(30, 90, 168, 0.08);
-  opacity: 0.65;
-}
-
-.home-ring::before,
-.home-ring::after {
-  content: '';
-  position: absolute;
-  inset: -12px;
-  border-radius: 50%;
-  border: 1px solid rgba(15, 118, 110, 0.08);
-}
-
-.home-ring::before {
-  transform: scale(0.88) rotate(18deg);
-  animation: spin-slow 34s linear infinite;
-}
-
-.home-ring::after {
-  transform: scale(1.08) rotate(-22deg);
-  animation: spin-slower 46s linear infinite reverse;
-}
-
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.55;
-}
-
-.blob-a {
-  width: 560px;
-  height: 560px;
-  top: -180px;
-  left: 50%;
-  margin-left: -480px;
-  background: radial-gradient(circle, rgba(30, 90, 168, 0.22), transparent 68%);
-  animation: drift-a 24s ease-in-out infinite;
-}
-
-.blob-b {
-  width: 500px;
-  height: 500px;
-  top: -140px;
-  left: 50%;
-  margin-left: 40px;
-  background: radial-gradient(circle, rgba(15, 118, 110, 0.18), transparent 68%);
-  animation: drift-b 28s ease-in-out infinite;
-}
-
-.blob-c {
-  width: 460px;
-  height: 460px;
-  bottom: -220px;
-  left: 50%;
-  margin-left: -230px;
-  background: radial-gradient(circle, rgba(30, 90, 168, 0.12), transparent 70%);
-  animation: drift-c 32s ease-in-out infinite;
-}
-
-@keyframes drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(46px, 34px) scale(1.1); }
-}
-
-@keyframes drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-52px, 22px) scale(1.08); }
-}
-
-@keyframes drift-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(30px, -28px) scale(1.12); }
-}
-
-@keyframes grid-drift {
-  from { background-position: 0 0, 0 0; }
-  to { background-position: 72px 72px, 72px 72px; }
-}
-
-@keyframes spin-slow {
-  from { transform: scale(0.88) rotate(18deg); }
-  to { transform: scale(0.88) rotate(378deg); }
-}
-
-@keyframes spin-slower {
-  from { transform: scale(1.08) rotate(-22deg); }
-  to { transform: scale(1.08) rotate(-382deg); }
-}
-
-/* ── 居中 hero ── */
-.home-hero {
-  position: relative;
-  z-index: 1;
+.home-brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  max-width: 760px;
+  gap: 11px;
+  color: #171b24;
+  text-decoration: none;
 }
 
-.home-title-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0 12px;
-  margin-inline: auto;
+.home-brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 7px;
+  background: #171b24;
+  color: white;
+  font-weight: 800;
 }
 
-.home-title-wrap::before {
-  content: none;
+.home-brand > span:last-child {
+  display: grid;
 }
 
-.home-title-wrap::after {
-  content: '';
-  position: absolute;
-  inset: auto 14% 0;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgba(30, 90, 168, 0.4), rgba(15, 118, 110, 0.55), transparent);
-  filter: blur(1px);
-  animation: title-scan 4.8s ease-in-out infinite;
+.home-brand strong {
+  font-size: 16px;
 }
 
-/* 进场：逐行上浮淡入 */
-.home-hero > * {
-  opacity: 0;
-  animation: rise 0.72s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-}
-
-.home-kicker { animation-delay: 0.05s; }
-.home-hero h1 { animation-delay: 0.16s; }
-.home-hero p { animation-delay: 0.29s; }
-.home-actions { animation-delay: 0.42s; }
-.home-modules { animation-delay: 0.54s; }
-
-@keyframes rise {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes title-scan {
-  0%, 100% { transform: translateX(-8%); opacity: 0.65; }
-  50% { transform: translateX(8%); opacity: 1; }
-}
-
-.home-kicker {
-  margin-bottom: 24px;
-  padding: 6px 15px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+.home-brand small {
+  color: #77828f;
+  font-size: 10px;
   text-transform: uppercase;
 }
 
-.home-hero h1 {
-  margin: 0;
-  position: relative;
-  z-index: 1;
-  font-family: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  font-size: clamp(38px, 6.4vw, 66px);
-  font-weight: 850;
-  line-height: 1.04;
-  letter-spacing: -0.06em;
-  color: transparent;
-  background: linear-gradient(135deg, #0d1725 0%, #123966 36%, #1e5aa8 64%, #0f766e 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  text-shadow: 0 2px 18px rgba(30, 90, 168, 0.08);
-  filter: drop-shadow(0 12px 28px rgba(22, 32, 46, 0.12));
-}
-
-.home-hero p {
-  margin: 24px 0 36px;
-  max-width: 600px;
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1.7;
-}
-
-.home-hero p::selection,
-.home-hero h1::selection,
-.home-kicker::selection {
-  background: rgba(30, 90, 168, 0.18);
-}
-
-.home-actions {
+.home-nav-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
 }
 
-/* 底部模块名：细竖线分隔的轻量列表 */
-.home-modules {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 44px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
+.home-nav-actions > button:first-child,
+.text-action {
+  border: 0;
+  background: transparent;
+  color: #3f4a58;
+  cursor: pointer;
+  font-weight: 650;
 }
 
-.home-modules span {
+.home-hero {
   position: relative;
-  padding: 0 18px;
+  min-height: clamp(520px, 68vh, 720px);
+  max-width: 1440px;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 24px 70px rgba(30, 42, 54, 0.12);
 }
 
-.home-modules span:not(:last-child)::after {
-  content: '';
+.hero-copy {
   position: absolute;
-  right: 0;
   top: 50%;
-  width: 1px;
-  height: 12px;
-  background: var(--line);
+  left: clamp(30px, 6vw, 92px);
+  width: min(600px, 50%);
   transform: translateY(-50%);
 }
 
-@media (max-width: 640px) {
-  .home {
-    padding-inline: 16px;
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #466172;
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.hero-kicker i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #11a5a3;
+  box-shadow: 0 0 0 5px rgba(17, 165, 163, 0.12);
+}
+
+.hero-copy h1 {
+  margin: 22px 0 20px;
+  color: #171b24;
+  font-size: clamp(42px, 4.5vw, 64px);
+  font-weight: 780;
+  line-height: 1.07;
+}
+
+.hero-copy p {
+  max-width: 470px;
+  margin: 0;
+  color: #526271;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 34px;
+}
+
+.hero-status {
+  position: absolute;
+  right: 30px;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 24px rgba(34, 52, 66, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.status-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #1a9b61;
+  box-shadow: 0 0 0 5px rgba(26, 155, 97, 0.13);
+}
+
+.hero-status div {
+  display: grid;
+  gap: 2px;
+}
+
+.hero-status strong {
+  font-size: 12px;
+}
+
+.hero-status small {
+  color: #72808d;
+  font-size: 10px;
+}
+
+.module-section {
+  max-width: 1260px;
+  margin: 58px auto 0;
+}
+
+.module-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 24px;
+}
+
+.module-heading span {
+  color: #2f6fed;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.module-heading h2 {
+  margin: 8px 0 0;
+  font-size: clamp(25px, 3vw, 38px);
+}
+
+.module-heading p {
+  max-width: 450px;
+  margin: 0;
+  color: #677582;
+  line-height: 1.65;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.module-card {
+  position: relative;
+  display: grid;
+  min-height: 245px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid #dfe6eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #171b24;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.module-card:hover {
+  transform: translateY(-3px);
+  border-color: #c4d1da;
+  box-shadow: 0 16px 36px rgba(39, 54, 68, 0.09);
+}
+
+.module-index {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  color: #a4adb6;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.module-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 23px;
+}
+
+.is-cyan .module-icon {
+  background: #e5f7f7;
+  color: #078c8a;
+}
+
+.is-coral .module-icon {
+  background: #fff0eb;
+  color: #df6347;
+}
+
+.is-green .module-icon {
+  background: #eaf7ef;
+  color: #278554;
+}
+
+.module-card > strong {
+  align-self: end;
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+.module-card > small {
+  margin-top: 8px;
+  color: #6a7683;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.module-enter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 22px;
+  color: #2f6fed;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+@media (max-width: 900px) {
+  .home-hero {
+    min-height: 650px;
+    background-position: 62% center;
   }
 
-  .home-title-wrap {
-    padding-bottom: 10px;
+  .hero-copy {
+    top: 56px;
+    left: 28px;
+    width: calc(100% - 56px);
+    transform: none;
   }
 
-  .home-modules span {
-    padding: 0 12px;
+  .hero-copy p {
+    max-width: 54%;
+  }
+
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
-/* 尊重「减少动态效果」的系统设置 */
+@media (max-width: 600px) {
+  .home {
+    padding-inline: 12px;
+  }
+
+  .home-nav {
+    min-height: 70px;
+    gap: 12px;
+  }
+
+  .home-nav-actions > button:first-child {
+    display: none;
+  }
+
+  .home-hero {
+    min-height: 680px;
+    background-position: 38% center;
+  }
+
+  .hero-copy {
+    left: 20px;
+    width: calc(100% - 40px);
+  }
+
+  .hero-copy h1 {
+    margin-top: 18px;
+    font-size: 34px;
+    line-height: 1.14;
+  }
+
+  .hero-copy p {
+    max-width: 78%;
+    padding-right: 16px;
+    color: #405260;
+    font-size: 14px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+
+  .hero-status {
+    max-width: calc(100% - 36px);
+    right: 18px;
+    bottom: 18px;
+  }
+
+  .hero-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 26px;
+  }
+
+  .module-section {
+    margin-top: 42px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .home-hero > * {
-    opacity: 1;
-    animation: none;
-  }
-
-  .blob {
-    animation: none;
-  }
-
-  .home-grid,
-  .home-ring::before,
-  .home-ring::after,
-  .home-title-wrap::after {
-    animation: none;
+  .module-card {
+    transition: none;
   }
 }
 </style>

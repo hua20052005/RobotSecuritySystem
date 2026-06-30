@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -9,7 +11,41 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.etbert_api.etbert_service import etbert, MODEL_DEFS, logger
+logger = logging.getLogger(__name__)
+
+PACKET_LABELS = {
+    0: "正常",
+    1: "指令码异常",
+    2: "参数值异常",
+    3: "格式违规",
+}
+FLOW_LABELS = {
+    0: "正常流",
+    1: "注入流异常",
+    2: "速率泛洪",
+    3: "方向振荡",
+    4: "指令码扫描",
+}
+MODEL_DEFS = {
+    "packet": {
+        "labels_num": 4,
+        "labels": PACKET_LABELS,
+        "type": "packet",
+    },
+    "flow": {
+        "labels_num": 5,
+        "labels": FLOW_LABELS,
+        "type": "flow",
+    },
+}
+
+
+def _service():
+    # PyTorch is optional and expensive; loading it during app import can take down
+    # every unrelated detector when the local binary runtime is incompatible.
+    from backend.etbert_api.etbert_service import etbert
+
+    return etbert
 
 RUN_DIR = Path(__file__).resolve().parents[2] / "data" / "etbert_runs"
 RUN_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,7 +106,7 @@ async def _run_detect(file: UploadFile, model_key: str, max_packets: int):
     input_path.write_bytes(await file.read())
 
     try:
-        result = etbert.detect_pcap(model_key, str(input_path), max_packets)
+        result = _service().detect_pcap(model_key, str(input_path), max_packets)
     except Exception as exc:
         logger.exception("ET-BERT detect failed")
         raise HTTPException(500, f"检测失败: {exc}")
@@ -95,6 +131,9 @@ async def _run_detect(file: UploadFile, model_key: str, max_packets: int):
 def preload_models():
     """供主应用 startup 调用，预加载模型到内存"""
     import sys as _sys
+    if os.getenv("ROBOT_ETBERT_PRELOAD", "0") != "1":
+        return
+    etbert = _service()
     for key in ("packet", "flow"):
         try:
             etbert.load_model(key)

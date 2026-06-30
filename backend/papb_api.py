@@ -86,6 +86,7 @@ class DetectRequest(BaseModel):
     require_terminal: bool = True
     save_history: bool = True
     source: str = "manual"
+    scenario: str = "general"
 
 
 class ReviewRequest(BaseModel):
@@ -110,6 +111,7 @@ class NextActionRequest(BaseModel):
     sequence: str = ""
     actual_action: Optional[str] = None
     top_k: int = Field(default=5, ge=1, le=20)
+    scenario: str = "general"
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -268,6 +270,7 @@ def model_detail() -> Dict[str, Any]:
         "embedding_centers": model.get("embedding_centers", {}),
         "embedding_kind": model.get("embedding_kind", "external"),
         "forbidden_transitions": model.get("forbidden_transitions", []),
+        "scenario_rules": model.get("scenario_rules", {}),
         "transition_risk_threshold": model.get("transition_risk_threshold", 0.15),
     }
 
@@ -303,9 +306,14 @@ def detect_sequence(
         raise HTTPException(status_code=400, detail="请至少输入一个动作标签")
 
     validator = _load_validator()
-    result = validator.validate_sequence(actions, require_terminal=payload.require_terminal)
+    result = validator.validate_sequence(
+        actions,
+        require_terminal=payload.require_terminal,
+        scenario=payload.scenario,
+    )
     result["input_actions"] = labels
     result["source"] = payload.source
+    result["scenario"] = payload.scenario
 
     if payload.auto_review and result.get("status") == "UNKNOWN_VALIDITY":
         result["review"] = add_pending_review(
@@ -326,6 +334,7 @@ def detect_sequence(
                 "auto_review": payload.auto_review,
                 "require_terminal": payload.require_terminal,
                 "source": payload.source,
+                "scenario": payload.scenario,
             },
             summary=_task_summary(result),
             result=result,
@@ -353,6 +362,7 @@ def predict_next_action(payload: NextActionRequest) -> Dict[str, Any]:
         history,
         actual_action=actual,
         top_k=payload.top_k,
+        scenario=payload.scenario,
     )
 
 

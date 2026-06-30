@@ -270,18 +270,24 @@
       "hello",
       "jump",
       "stand"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "move",
+      "stand"
     ]
   ],
   "max_repeats": {
-    "stand": 5,
-    "hello": 3,
-    "move": 6,
+    "stand": 8,
+    "hello": 4,
+    "move": 20,
     "backflip": 1,
-    "moonwalk": 1,
-    "jump": 1,
-    "twistBody": 1,
+    "moonwalk": 3,
+    "jump": 2,
+    "twistBody": 3,
     "twistJump": 1,
-    "dance1": 1
+    "dance1": 3
   },
   "critical_actions": [],
   "noncritical_actions": [
@@ -390,64 +396,64 @@
       0.0
     ],
     "context:move": [
-      0.045455,
-      0.068182,
-      0.090909,
+      0.044444,
+      0.066667,
+      0.088889,
       0.0,
-      0.113636,
-      0.363636,
-      0.318182,
+      0.111111,
+      0.355556,
+      0.311111,
+      0.022222,
       0.0,
+      0.088889,
       0.0,
-      0.090909,
-      0.0,
-      0.022727,
-      0.045455,
-      0.022727,
-      0.363636,
-      0.295455,
-      0.045455,
-      0.022727
+      0.022222,
+      0.044444,
+      0.022222,
+      0.355556,
+      0.311111,
+      0.044444,
+      0.022222
     ],
     "context:stand": [
+      0.014706,
+      0.014706,
+      0.161765,
+      0.117647,
+      0.044118,
+      0.205882,
+      0.25,
+      0.117647,
+      0.073529,
       0.014925,
-      0.014925,
-      0.164179,
-      0.119403,
-      0.044776,
-      0.19403,
-      0.253731,
-      0.119403,
-      0.074627,
-      0.015152,
-      0.030303,
-      0.106061,
-      0.030303,
-      0.113636,
-      0.106061,
-      0.128788,
-      0.090909,
+      0.029851,
+      0.104478,
+      0.029851,
+      0.11194,
+      0.104478,
+      0.126866,
+      0.097015,
       0.0
     ],
     "context:twistBody": [
       0.0,
       0.0,
-      0.210526,
+      0.2,
       0.0,
-      0.052632,
-      0.105263,
-      0.631579,
-      0.0,
-      0.0,
+      0.05,
+      0.1,
+      0.65,
       0.0,
       0.0,
       0.0,
       0.0,
-      0.105263,
       0.0,
-      0.421053,
       0.0,
-      0.368421
+      0.1,
+      0.05,
+      0.4,
+      0.0,
+      0.35
     ],
     "context:twistJump": [
       0.0,
@@ -485,15 +491,15 @@
   "embedding_kind": "transition_context",
   "transition_matrix": {
     "stand": {
-      "__END__": 0.378788,
-      "backflip": 0.015152,
-      "dance1": 0.030303,
-      "hello": 0.106061,
-      "jump": 0.030303,
-      "moonwalk": 0.113636,
-      "move": 0.106061,
-      "stand": 0.128788,
-      "twistBody": 0.090909
+      "__END__": 0.380597,
+      "backflip": 0.014925,
+      "dance1": 0.029851,
+      "hello": 0.104478,
+      "jump": 0.029851,
+      "moonwalk": 0.11194,
+      "move": 0.104478,
+      "stand": 0.126866,
+      "twistBody": 0.097015
     },
     "hello": {
       "__END__": 0.115385,
@@ -504,15 +510,15 @@
       "twistBody": 0.153846
     },
     "move": {
-      "__END__": 0.090909,
-      "backflip": 0.090909,
-      "hello": 0.022727,
-      "jump": 0.045455,
-      "moonwalk": 0.022727,
-      "move": 0.363636,
-      "stand": 0.295455,
-      "twistBody": 0.045455,
-      "twistJump": 0.022727
+      "__END__": 0.088889,
+      "backflip": 0.088889,
+      "hello": 0.022222,
+      "jump": 0.044444,
+      "moonwalk": 0.022222,
+      "move": 0.355556,
+      "stand": 0.311111,
+      "twistBody": 0.044444,
+      "twistJump": 0.022222
     },
     "backflip": {
       "__END__": 0.428571,
@@ -535,10 +541,11 @@
       "stand": 0.8
     },
     "twistBody": {
-      "__END__": 0.105263,
-      "moonwalk": 0.105263,
-      "stand": 0.421053,
-      "twistJump": 0.368421
+      "__END__": 0.1,
+      "moonwalk": 0.1,
+      "move": 0.05,
+      "stand": 0.4,
+      "twistJump": 0.35
     },
     "twistJump": {
       "__END__": 0.25,
@@ -552,15 +559,15 @@
   },
   "context_transitions": {
     "stand": {
-      "__END__": 0.378788,
-      "backflip": 0.015152,
-      "dance1": 0.030303,
-      "hello": 0.106061,
-      "jump": 0.030303,
-      "moonwalk": 0.113636,
-      "move": 0.106061,
-      "stand": 0.128788,
-      "twistBody": 0.090909
+      "__END__": 0.380597,
+      "backflip": 0.014925,
+      "dance1": 0.029851,
+      "hello": 0.104478,
+      "jump": 0.029851,
+      "moonwalk": 0.11194,
+      "move": 0.104478,
+      "stand": 0.126866,
+      "twistBody": 0.097015
     },
     "hello": {
       "__END__": 0.115385,
@@ -578,15 +585,15 @@
       "twistBody": 0.071429
     },
     "move": {
-      "__END__": 0.090909,
-      "backflip": 0.090909,
-      "hello": 0.022727,
-      "jump": 0.045455,
-      "moonwalk": 0.022727,
-      "move": 0.363636,
-      "stand": 0.295455,
-      "twistBody": 0.045455,
-      "twistJump": 0.022727
+      "__END__": 0.088889,
+      "backflip": 0.088889,
+      "hello": 0.022222,
+      "jump": 0.044444,
+      "moonwalk": 0.022222,
+      "move": 0.355556,
+      "stand": 0.311111,
+      "twistBody": 0.044444,
+      "twistJump": 0.022222
     },
     "hello|move": {
       "backflip": 0.5,
@@ -663,15 +670,17 @@
       "__END__": 1.0
     },
     "twistBody": {
-      "__END__": 0.105263,
-      "moonwalk": 0.105263,
-      "stand": 0.421053,
-      "twistJump": 0.368421
+      "__END__": 0.1,
+      "moonwalk": 0.1,
+      "move": 0.05,
+      "stand": 0.4,
+      "twistJump": 0.35
     },
     "stand|twistBody": {
-      "moonwalk": 0.166667,
-      "stand": 0.25,
-      "twistJump": 0.583333
+      "moonwalk": 0.153846,
+      "move": 0.076923,
+      "stand": 0.230769,
+      "twistJump": 0.538462
     },
     "twistJump": {
       "__END__": 0.25,
@@ -741,8 +750,8 @@
       "stand": 0.444444
     },
     "move|stand": {
-      "__END__": 0.846154,
-      "stand": 0.153846
+      "__END__": 0.857143,
+      "stand": 0.142857
     },
     "move|move|stand": {
       "__END__": 1.0
@@ -993,13 +1002,22 @@
     },
     "hello|jump|stand": {
       "__END__": 1.0
+    },
+    "twistBody|move": {
+      "stand": 1.0
+    },
+    "stand|twistBody|move": {
+      "stand": 1.0
+    },
+    "twistBody|move|stand": {
+      "__END__": 1.0
     }
   },
   "context_support": {
-    "stand": 132,
+    "stand": 134,
     "hello": 26,
     "stand|hello": 14,
-    "move": 44,
+    "move": 45,
     "hello|move": 4,
     "stand|hello|move": 4,
     "backflip": 7,
@@ -1016,8 +1034,8 @@
     "stand|moonwalk|hello": 7,
     "hello|stand": 11,
     "moonwalk|hello|stand": 2,
-    "twistBody": 19,
-    "stand|twistBody": 12,
+    "twistBody": 20,
+    "stand|twistBody": 13,
     "twistJump": 8,
     "twistBody|twistJump": 7,
     "stand|twistBody|twistJump": 7,
@@ -1033,7 +1051,7 @@
     "move|move": 16,
     "stand|move|move": 5,
     "move|move|move": 9,
-    "move|stand": 13,
+    "move|stand": 14,
     "move|move|stand": 5,
     "stand|move|backflip": 2,
     "backflip|move": 2,
@@ -1109,9 +1127,40 @@
     "backflip|stand": 1,
     "stand|backflip|stand": 1,
     "moonwalk|move|stand": 1,
-    "hello|jump|stand": 1
+    "hello|jump|stand": 1,
+    "twistBody|move": 1,
+    "stand|twistBody|move": 1,
+    "twistBody|move|stand": 1
   },
   "context_max_order": 3,
+  "scenario_rules": {
+    "general": {
+      "description": "自由操控与通用演示；已知动作的罕见组合只提示偏移"
+    },
+    "patrol": {
+      "description": "巡逻与移动任务",
+      "allowed_actions": [
+        "stand",
+        "move",
+        "hello",
+        "jump"
+      ]
+    },
+    "interaction": {
+      "description": "低冲击交互展示",
+      "allowed_actions": [
+        "stand",
+        "move",
+        "hello",
+        "moonwalk",
+        "dance1",
+        "twistBody"
+      ]
+    },
+    "performance": {
+      "description": "完整动作表演；允许全部已知动作"
+    }
+  },
   "forbidden_transitions": [
     {
       "from": "backflip",
@@ -1124,30 +1173,6 @@
       "to": "twistJump",
       "rule": "扭身跳后必须恢复姿态，禁止连续扭身跳",
       "score": 0.98
-    },
-    {
-      "from": "backflip",
-      "to": "twistJump",
-      "rule": "高冲击后空翻后不能直接衔接扭身跳",
-      "score": 0.96
-    },
-    {
-      "from": "twistJump",
-      "to": "backflip",
-      "rule": "扭身跳落地后不能直接衔接后空翻",
-      "score": 0.96
-    },
-    {
-      "from": "jump",
-      "to": "backflip",
-      "rule": "普通跳跃后应先恢复姿态再执行后空翻",
-      "score": 0.94
-    },
-    {
-      "from": "dance1",
-      "to": "backflip",
-      "rule": "舞蹈动作结束后应先恢复再执行后空翻",
-      "score": 0.93
     }
   ],
   "transition_risk_threshold": 0.08,

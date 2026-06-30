@@ -2,6 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, provide, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import {
+  Clock,
+  Connection,
+  Cpu,
+  DataAnalysis,
+  DocumentChecked,
+  HomeFilled,
+  Lock,
+  User,
+} from '@element-plus/icons-vue'
 
 import api from './api/client'
 import { errorText } from './lib/http-error'
@@ -22,6 +32,15 @@ const authForm = reactive({
   confirm_password: '',
   remember: true,
 })
+
+const navItems = [
+  { to: '/', label: '系统总览', icon: HomeFilled },
+  { to: '/side-channel', label: '侧信道分析', icon: DataAnalysis },
+  { to: '/payload', label: '载荷检测', icon: Lock },
+  { to: '/motion', label: '动作序列分析', icon: Connection },
+  { to: '/history', label: '审计历史', icon: Clock },
+  { to: '/profile', label: '账户设置', icon: User },
+]
 
 provide('auth', auth)
 provide('openAuth', (mode = 'login') => {
@@ -135,26 +154,34 @@ onBeforeUnmount(() => {
   <div v-else class="workbench-shell">
     <aside class="console-sidebar">
       <RouterLink class="sidebar-brand" to="/">
-        <span class="brand-mark">R</span>
+        <span class="brand-mark"><el-icon><Cpu /></el-icon></span>
         <span>
-          <strong>机器人安全审计</strong>
-          <small>Robot Security System</small>
+          <strong>RobotSec</strong>
+          <small>机器人安全审计</small>
         </span>
       </RouterLink>
 
+      <span class="sidebar-label">分析工作台</span>
       <nav class="sidebar-nav">
-        <RouterLink to="/side-channel">侧信道分析</RouterLink>
-        <RouterLink to="/payload">载荷检测</RouterLink>
-        <RouterLink to="/motion">动作序列</RouterLink>
-        <RouterLink to="/papb">PAPB 校验</RouterLink>
-        <RouterLink to="/history">审计历史</RouterLink>
-        <RouterLink to="/profile">账户设置</RouterLink>
+        <RouterLink v-for="item in navItems" :key="item.to" :to="item.to">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </RouterLink>
       </nav>
+
+      <div class="sidebar-foot">
+        <DocumentChecked />
+        <span>
+          <strong>本地审计模式</strong>
+          <small>证据仅保存在当前设备</small>
+        </span>
+      </div>
     </aside>
 
     <main class="workbench-main">
       <div class="page-heading">
         <div>
+          <span class="page-kicker">安全分析工作台</span>
           <h1>{{ route.meta.title || '机器人网络安全审计' }}</h1>
         </div>
 

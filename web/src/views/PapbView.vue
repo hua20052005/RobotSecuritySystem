@@ -9,6 +9,7 @@ const sequenceText = ref('stand, hello, stand')
 const autoReview = ref(true)
 const requireTerminal = ref(true)
 const saveHistory = ref(true)
+const scenario = ref('general')
 const loading = ref(false)
 const retraining = ref(false)
 const result = ref(null)
@@ -31,6 +32,12 @@ const predictionHistoryText = ref('stand, twistBody')
 const predictionActualAction = ref('twistJump')
 const predictionLoading = ref(false)
 const predictionResult = ref(null)
+const scenarioOptions = [
+  { value: 'general', label: '自由操控 / 通用演示' },
+  { value: 'patrol', label: '巡逻任务' },
+  { value: 'interaction', label: '低冲击交互展示' },
+  { value: 'performance', label: '完整动作表演' },
+]
 
 const statusMap = {
   NORMAL: { type: 'success', text: '正常', explain: '动作序列完整命中已学习的正常流程模板。' },
@@ -142,6 +149,7 @@ const runDetect = async (source = 'manual') => {
       require_terminal: requireTerminal.value,
       save_history: saveHistory.value,
       source,
+      scenario: scenario.value,
     })
     result.value = data
     if (data.status === 'UNKNOWN_VALIDITY' && data.review?.added) {
@@ -260,6 +268,7 @@ const runNextPrediction = async () => {
       history,
       actual_action: predictionActualAction.value || null,
       top_k: 8,
+      scenario: scenario.value,
     })
     predictionResult.value = data
   } catch (error) {
@@ -350,6 +359,17 @@ onMounted(refreshAll)
           <el-checkbox v-model="requireTerminal">要求到达终止动作</el-checkbox>
           <el-checkbox v-model="saveHistory">保存到历史记录</el-checkbox>
         </div>
+        <label class="control-field">
+          <span>任务场景</span>
+          <el-select v-model="scenario">
+            <el-option
+              v-for="item in scenarioOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </label>
         <div class="action-row">
           <el-button type="primary" :loading="loading" @click="runDetect('manual')">开始检测</el-button>
           <el-button :disabled="!result" @click="openReport">生成报告</el-button>

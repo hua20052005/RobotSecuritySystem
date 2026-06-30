@@ -62,6 +62,7 @@ class PapbValidator:
     context_support: dict[str, int] | None = None
     context_max_order: int = 3
     embedding_kind: str = "external"
+    scenario_rules: dict[str, dict[str, object]] | None = None
     forbidden_transitions: object = None
     transition_risk_threshold: float = 0.15
     max_edit_distance: int = 0
@@ -121,6 +122,15 @@ class PapbValidator:
         )
         object.__setattr__(self, "context_max_order", max(1, int(self.context_max_order or 1)))
         object.__setattr__(self, "embedding_kind", str(self.embedding_kind or "external"))
+        object.__setattr__(
+            self,
+            "scenario_rules",
+            {
+                str(name): dict(rule)
+                for name, rule in (self.scenario_rules or {}).items()
+                if isinstance(rule, dict)
+            },
+        )
         object.__setattr__(
             self,
             "forbidden_transitions",
@@ -191,6 +201,7 @@ class PapbValidator:
         context_support: dict[str, int] | None = None,
         context_max_order: int = 3,
         embedding_kind: str = "external",
+        scenario_rules: dict[str, dict[str, object]] | None = None,
         forbidden_transitions: object = None,
         transition_risk_threshold: float = 0.15,
         max_edit_distance: int = 0,
@@ -229,6 +240,7 @@ class PapbValidator:
             context_support=context_support or {},
             context_max_order=context_max_order,
             embedding_kind=embedding_kind,
+            scenario_rules=scenario_rules or {},
             forbidden_transitions=forbidden_transitions,
             transition_risk_threshold=transition_risk_threshold,
             max_edit_distance=max_edit_distance,
@@ -261,6 +273,7 @@ class PapbValidator:
             context_support=normalized["context_support"],
             context_max_order=int(normalized["context_max_order"]),
             embedding_kind=str(normalized["embedding_kind"]),
+            scenario_rules=normalized["scenario_rules"],
             forbidden_transitions=normalized["forbidden_transitions"],
             transition_risk_threshold=float(normalized["transition_risk_threshold"]),
             max_edit_distance=(
@@ -288,7 +301,9 @@ class PapbValidator:
         repeat_margin: int = 0,
         embedding_threshold_margin: float = 3.0,
         min_embedding_threshold: float = 0.15,
+        max_repeats_override: dict[str, int] | None = None,
         forbidden_transitions: object = None,
+        scenario_rules: dict[str, dict[str, object]] | None = None,
         transition_risk_threshold: float = 0.15,
         context_max_order: int = 3,
         end_action: str = END_ACTION,
@@ -311,6 +326,12 @@ class PapbValidator:
             raise ValueError("No normal training sequences were provided.")
 
         max_repeats = cls._learn_max_repeats(sequences, margin=repeat_margin)
+        max_repeats.update(
+            {
+                str(action): int(limit)
+                for action, limit in (max_repeats_override or {}).items()
+            }
+        )
         critical_actions = cls._learn_critical_actions(
             templates,
             min_support=critical_min_support,
@@ -348,6 +369,7 @@ class PapbValidator:
             context_transitions=context_transitions,
             context_support=context_support,
             context_max_order=context_max_order,
+            scenario_rules=scenario_rules or {},
             forbidden_transitions=forbidden_transitions,
             transition_risk_threshold=transition_risk_threshold,
             max_edit_distance=max_edit_distance,
@@ -366,6 +388,8 @@ class PapbValidator:
         normalized = _normalize_papb_dataset(data, path)
         records = normalized["training_sequences"] or normalized["normal_templates"]
         kwargs.setdefault("forbidden_transitions", normalized["forbidden_transitions"])
+        kwargs.setdefault("scenario_rules", normalized["scenario_rules"])
+        kwargs.setdefault("max_repeats_override", normalized["max_repeats"])
         kwargs.setdefault(
             "transition_risk_threshold",
             float(normalized["transition_risk_threshold"]),
@@ -440,11 +464,19 @@ class PapbValidator:
             reason=reason,
         )
 
-    def validate_next_action(self, executed_sequence, action, start_actions=None) -> dict[str, object]:
+    def validate_next_action(
+        self,
+        executed_sequence,
+        action,
+        start_actions=None,
+        *,
+        scenario: str = "general",
+    ) -> dict[str, object]:
         prediction = self.predict_next_actions(
             executed_sequence,
             actual_action=action,
             top_k=8,
+            scenario=scenario,
         )
         state = self.predict_next_state(executed_sequence, start_actions=start_actions)
         actual = prediction.get("actual") or {}
@@ -471,6 +503,7 @@ class PapbValidator:
         *,
         actual_action: str | None = None,
         top_k: int = 5,
+        scenario: str = "general",
     ) -> dict[str, object]:
         """Predict the next action using longest-context probabilities with backoff."""
         history = self._clean_sequence(executed_sequence)
@@ -519,6 +552,8 @@ class PapbValidator:
             probabilities.items(),
             key=lambda item: (-float(item[1]), item[0]),
         )[:top_k]:
+            if self._scenario_action_reason(action, scenario):
+                continue
             probability = float(probability)
             comparison_max = (
                 max_probability
@@ -548,12 +583,20 @@ class PapbValidator:
             )
             previous = history[-1] if history else None
             forbidden = self.forbidden_transitions.get((previous, actual)) if previous else None
+            scenario_reason = self._scenario_action_reason(actual, scenario)
+            known_actions = self._known_actions()
             embedding_similarity = self._expected_embedding_similarity(
                 actual,
                 [item["action"] for item in candidates],
             )
 
-            if forbidden:
+            if actual not in known_actions and actual != self.end_action:
+                decision = "ANOMALY"
+                reason = f"unknown action label '{actual}'"
+            elif scenario_reason:
+                decision = "ANOMALY"
+                reason = scenario_reason
+            elif forbidden:
                 decision = "ANOMALY"
                 reason = (
                     f"forbidden transition '{previous} -> {actual}' "
@@ -579,9 +622,10 @@ class PapbValidator:
                     f"context role (similarity {embedding_similarity:.3f})"
                 )
             else:
-                decision = "ANOMALY"
+                decision = "DEVIATION"
                 reason = (
-                    f"action '{actual}' was never observed after context '{context_key}'"
+                    f"action '{actual}' is known but was not observed after context "
+                    f"'{context_key}'; manual confirmation is recommended"
                 )
 
             actual_result = {
@@ -599,6 +643,7 @@ class PapbValidator:
 
         return {
             "history": history,
+            "scenario": scenario,
             "context": context_key,
             "context_order": 0 if context_key == "<START>" else len(context_key.split("|")),
             "support": support,
@@ -612,7 +657,13 @@ class PapbValidator:
             ),
         }
 
-    def validate_sequence(self, sequence: Iterable[object], *, require_terminal: bool | None = None) -> dict[str, object]:
+    def validate_sequence(
+        self,
+        sequence: Iterable[object],
+        *,
+        require_terminal: bool | None = None,
+        scenario: str = "general",
+    ) -> dict[str, object]:
         """
         Validate a complete action-label sequence.
 
@@ -627,9 +678,10 @@ class PapbValidator:
                 actions,
                 action_items=action_items,
                 require_terminal=require_terminal,
+                scenario=scenario,
             )
 
-        violations: list[dict[str, object]] = []
+        violations: list[dict[str, object]] = self._scenario_violations(actions, scenario)
         matched_path: list[str] = []
 
         if not actions:
@@ -888,6 +940,74 @@ class PapbValidator:
                 similarities.append(self._cosine_similarity(actual_vector, expected_vector))
         return max(similarities, default=0.0)
 
+    def _known_actions(self) -> set[str]:
+        return {
+            action
+            for sequence in self.task_sequences
+            for action in sequence
+        }
+
+    def _scenario_action_reason(self, action: str, scenario: str) -> str | None:
+        if action == self.end_action:
+            return None
+        rule = self.scenario_rules.get(str(scenario or "general"), {})
+        forbidden = {
+            str(value)
+            for value in rule.get("forbidden_actions", [])
+        }
+        allowed = {
+            str(value)
+            for value in rule.get("allowed_actions", [])
+        }
+        if action in forbidden:
+            return (
+                f"action '{action}' is not allowed in scenario "
+                f"'{scenario}'"
+            )
+        if allowed and action not in allowed:
+            return (
+                f"action '{action}' is outside the allowed action set for "
+                f"scenario '{scenario}'"
+            )
+        return None
+
+    def _scenario_violations(
+        self,
+        actions: list[str],
+        scenario: str,
+    ) -> list[dict[str, object]]:
+        violations = []
+        known = self._known_actions()
+        for index, action in enumerate(actions):
+            if action not in known:
+                violations.append(
+                    {
+                        "index": index,
+                        "previous": actions[index - 1] if index else None,
+                        "actual": action,
+                        "expected": sorted(known),
+                        "reason": f"unknown action label '{action}'",
+                        "hard": True,
+                    }
+                )
+                continue
+            reason = self._scenario_action_reason(action, scenario)
+            if reason:
+                violations.append(
+                    {
+                        "index": index,
+                        "previous": actions[index - 1] if index else None,
+                        "actual": action,
+                        "expected": self.scenario_rules.get(scenario, {}).get(
+                            "allowed_actions",
+                            [],
+                        ),
+                        "reason": reason,
+                        "hard": True,
+                    }
+                )
+        return violations
+
     @staticmethod
     def _normalize_action_items(sequence: Iterable[object]) -> list[dict[str, object]]:
         items: list[dict[str, object]] = []
@@ -920,6 +1040,7 @@ class PapbValidator:
         *,
         action_items: list[dict[str, object]] | None = None,
         require_terminal: bool,
+        scenario: str,
     ) -> dict[str, object]:
         action_items = action_items or [{"label": action} for action in actions]
         repeat_violations = self._repeat_violations(actions)
@@ -971,19 +1092,14 @@ class PapbValidator:
         )
         within_tolerance = best["edit_distance"] <= allowed_distance
         is_exact = best["edit_distance"] == 0
+        scenario_violations = self._scenario_violations(actions, scenario)
         hard_violations = [
             violation
             for violation in best["violations"]
             if violation.get("expected") == [self.end_action]
-            or (
-                violation.get("index") == 0
-                and any(
-                    expected in self.start_actions
-                    for expected in violation.get("expected", [])
-                )
-            )
             or any(expected in self.critical_actions for expected in violation.get("expected", []))
         ]
+        hard_violations.extend(scenario_violations)
         soft_violations = [
             violation
             for violation in best["violations"]
@@ -997,7 +1113,7 @@ class PapbValidator:
         embedding_result = self._embedding_match(best, action_items)
         if embedding_result["violations"]:
             hard_violations.extend(embedding_result["violations"])
-        transition_result = self._transition_analysis(actions)
+        transition_result = self._transition_analysis(actions, scenario=scenario)
         forbidden_violations = transition_result.get("violations", [])
         if forbidden_violations:
             hard_violations.extend(forbidden_violations)
@@ -1013,9 +1129,10 @@ class PapbValidator:
 
         violations = list(repeat_violations)
         if not valid:
+            violations.extend(scenario_violations)
+            violations.extend(forbidden_violations)
             violations.extend(best["violations"])
             violations.extend(embedding_result["violations"])
-            violations.extend(forbidden_violations)
         elif repeat_violations:
             valid = False
         status = "ANOMALY"
@@ -1052,7 +1169,6 @@ class PapbValidator:
             not valid
             and not hard_violations
             and not repeat_violations
-            and graph_check["plausible"]
         ):
             status = "UNKNOWN_VALIDITY"
             violations = [
@@ -1062,13 +1178,18 @@ class PapbValidator:
                     "actual": actions,
                     "expected": ["manual review"],
                     "reason": (
-                        "No known complete template matched within tolerance, "
-                        "but the action transitions are plausible in the learned task graph."
+                        "No known complete template matched within tolerance. "
+                        "The sequence does not violate a hard safety or scenario rule, "
+                        "so it is treated as a deviation requiring review."
                     ),
                 }
             ]
 
-        next_action_prediction = self.predict_next_actions(actions, top_k=5)
+        next_action_prediction = self.predict_next_actions(
+            actions,
+            top_k=5,
+            scenario=scenario,
+        )
         expected_next = [
             item["action"]
             for item in next_action_prediction["candidates"]
@@ -1309,7 +1430,12 @@ class PapbValidator:
             "invalid_transitions": invalid,
         }
 
-    def _transition_analysis(self, actions: list[str]) -> dict[str, object]:
+    def _transition_analysis(
+        self,
+        actions: list[str],
+        *,
+        scenario: str = "general",
+    ) -> dict[str, object]:
         """
         Gate ④: Markov transition check.
 
@@ -1336,6 +1462,7 @@ class PapbValidator:
                 actions[:idx],
                 actual_action=actual,
                 top_k=5,
+                scenario=scenario,
             )
             actual_prediction = context_prediction.get("actual") or {}
             context_prob = float(actual_prediction.get("probability", 0.0))
@@ -1517,7 +1644,8 @@ class PapbValidator:
         for record in records:
             expected = str(record.get("expected_status", "")).strip()
             sequence = record.get("actions", record.get("sequence", []))
-            result = self.validate_sequence(sequence)
+            scenario = str(record.get("scenario", "general")).strip() or "general"
+            result = self.validate_sequence(sequence, scenario=scenario)
             predicted = str(result["status"])
             ok = predicted == expected
             correct += int(ok)
@@ -1529,6 +1657,7 @@ class PapbValidator:
                     "predicted_status": predicted,
                     "correct": ok,
                     "sequence": sequence,
+                    "scenario": scenario,
                     "violations": result.get("violations", []),
                     "template_match": result.get("template_match", {}),
                 }
@@ -1563,6 +1692,7 @@ class PapbValidator:
             "context_transitions": self.context_transitions,
             "context_support": self.context_support,
             "context_max_order": self.context_max_order,
+            "scenario_rules": self.scenario_rules,
             "forbidden_transitions": [
                 {"from": src, "to": dst, "rule": meta["rule"], "score": meta["score"]}
                 for (src, dst), meta in self.forbidden_transitions.items()
@@ -1953,6 +2083,7 @@ def _normalize_papb_dataset(data: object, source_path: str | Path | None) -> dic
         ),
         "context_support": data.get("context_support", {}),
         "context_max_order": data.get("context_max_order", 3),
+        "scenario_rules": data.get("scenario_rules", {}),
         "forbidden_transitions": _map_forbidden_rules(
             data.get("forbidden_transitions", data.get("state_constraint_rules", [])),
             action_map,

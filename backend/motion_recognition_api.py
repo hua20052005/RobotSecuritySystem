@@ -98,6 +98,7 @@ def recognize_motion_file(
     method: str = Form("command"),
     transcript: Optional[str] = Form(None),
     validate_flow: bool = Form(True),
+    scenario: str = Form("general"),
     min_segment_s: float = Form(0.25),
     max_segment_s: Optional[float] = Form(None),
     step_s: float = Form(0.5),
@@ -148,13 +149,18 @@ def recognize_motion_file(
     if validate_flow and labels:
         validator = _load_papb_validator()
         if validator is not None:
-            papb_result = validator.validate_sequence(labels, require_terminal=False)
+            papb_result = validator.validate_sequence(
+                labels,
+                require_terminal=False,
+                scenario=scenario,
+            )
 
     summary = {
         "mode": mode,
         "method": method if mode == "sequence" else "single",
         "label_count": len(labels),
         "labels": labels,
+        "scenario": scenario,
         "flow_status": (papb_result or {}).get("status") if papb_result else None,
         "flow_valid": (papb_result or {}).get("valid") if papb_result else None,
     }
@@ -176,6 +182,7 @@ def recognize_motion_file(
             "method": method,
             "transcript": transcript,
             "validate_flow": validate_flow,
+            "scenario": scenario,
             "min_segment_s": min_segment_s,
             "max_segment_s": max_segment_s,
             "step_s": step_s,
