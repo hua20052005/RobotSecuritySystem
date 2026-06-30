@@ -1,39 +1,41 @@
 :root {
-  --bg: #f5f7fa;
+  --bg: #eaf0f3;
   --surface: #ffffff;
-  --surface-2: #f7f9fc;
-  --surface-3: #eef2f7;
-  --line: #e4e9f0;
-  --line-soft: #edf1f6;
-  --ink: #16202e;
-  --ink-2: #3c4a5c;
-  --muted: #6b7889;
-  --sidebar: #e8eff5;
-  --sidebar-2: #dce8f2;
-  --accent: #1e5aa8;
-  --accent-strong: #18467f;
-  --accent-2: #0f766e;
-  --accent-soft: #eaf1fb;
-  --danger: #c0392b;
-  --warning: #b76b1a;
-  --ok: #1d8a55;
-  --radius: 12px;
-  --radius-sm: 8px;
+  --surface-2: #f7f9fa;
+  --surface-3: #f0f4f6;
+  --line: #dce4e9;
+  --line-soft: #e9eef1;
+  --ink: #171b24;
+  --ink-2: #3f4a58;
+  --muted: #74808c;
+  --sidebar: #ffffff;
+  --sidebar-2: #f4f7f8;
+  --accent: #315fcf;
+  --accent-strong: #244aa8;
+  --accent-2: #0d9996;
+  --accent-soft: #edf3ff;
+  --coral: #e9694e;
+  --coral-soft: #fff0eb;
+  --danger: #c7444f;
+  --warning: #b76e16;
+  --ok: #238557;
+  --radius: 8px;
+  --radius-sm: 6px;
   --shadow: none;
-  --shadow-soft: 0 1px 2px rgba(22, 32, 46, 0.04), 0 8px 24px rgba(22, 32, 46, 0.06);
-  --shadow-card: 0 1px 2px rgba(22, 32, 46, 0.04), 0 4px 16px rgba(22, 32, 46, 0.05);
+  --shadow-soft: 0 12px 32px rgba(35, 49, 60, 0.08);
+  --shadow-card: 0 1px 2px rgba(35, 49, 60, 0.03), 0 8px 24px rgba(35, 49, 60, 0.045);
 
   /* 让 Element Plus 主色与自定义主色保持一致，避免“双蓝” */
-  --el-color-primary: #1e5aa8;
-  --el-color-primary-light-3: #5a87c2;
-  --el-color-primary-light-5: #8fabd5;
-  --el-color-primary-light-7: #c2d3e9;
-  --el-color-primary-light-8: #d8e3f2;
-  --el-color-primary-light-9: #eaf1fb;
-  --el-color-primary-dark-2: #18467f;
-  --el-border-radius-base: 8px;
+  --el-color-primary: #315fcf;
+  --el-color-primary-light-3: #6f8ddd;
+  --el-color-primary-light-5: #98abe7;
+  --el-color-primary-light-7: #c1cdef;
+  --el-color-primary-light-8: #d7dff5;
+  --el-color-primary-light-9: #edf3ff;
+  --el-color-primary-dark-2: #244aa8;
+  --el-border-radius-base: 6px;
 
-  font-family: 'Geist', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  font-family: Inter, 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;
   color: var(--ink);
   background: var(--bg);
   font-synthesis: none;
@@ -50,6 +52,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   font-variant-numeric: tabular-nums;
+  line-height: 1.5;
 }
 
 button,
@@ -116,7 +119,7 @@ textarea {
   position: relative;
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 238px minmax(0, 1fr);
   align-items: stretch;
 }
 
@@ -128,8 +131,8 @@ textarea {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  padding: 22px 16px;
+  gap: 18px;
+  padding: 24px 14px 18px;
   border-right: 1px solid var(--line);
   background: var(--surface);
 }
@@ -140,20 +143,21 @@ textarea {
   gap: 12px;
   color: var(--ink);
   text-decoration: none;
-  padding: 4px 8px;
+  padding: 2px 8px 18px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .brand-mark {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  border-radius: 7px;
+  background: var(--ink);
   color: #ffffff;
   font-weight: 800;
-  font-size: 18px;
-  box-shadow: 0 4px 12px rgba(30, 90, 168, 0.28);
+  font-size: 19px;
+  box-shadow: none;
 }
 
 .sidebar-brand strong,
@@ -164,35 +168,98 @@ textarea {
 .sidebar-brand small {
   margin-top: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.sidebar-label {
+  padding: 0 10px;
+  color: #9aa4ad;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   flex: 1 1 auto;
   overflow-y: auto;
 }
 
 .sidebar-nav a {
-  padding: 10px 14px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 42px;
+  padding: 9px 12px;
   color: var(--ink-2);
   text-decoration: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 600;
   transition: background 160ms ease, color 160ms ease;
 }
 
+.sidebar-nav a .el-icon {
+  width: 20px;
+  color: #84909b;
+  font-size: 18px;
+}
+
 .sidebar-nav a:hover {
-  background: var(--surface-3);
+  background: #f3f6f8;
   color: var(--ink);
 }
 
 .sidebar-nav a.router-link-active {
+  background: #edf3ff;
+  color: var(--accent);
+  font-weight: 750;
+}
+
+.sidebar-nav a.router-link-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 3px 3px 0;
   background: var(--accent);
-  color: #fff;
+}
+
+.sidebar-nav a.router-link-active .el-icon {
+  color: var(--accent);
+}
+
+.sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 10px 2px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+}
+
+.sidebar-foot > svg {
+  flex: 0 0 auto;
+  width: 22px;
+  color: var(--accent-2);
+}
+
+.sidebar-foot > span {
+  display: grid;
+  min-width: 0;
+}
+
+.sidebar-foot strong {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.sidebar-foot small {
+  margin-top: 2px;
+  font-size: 10px;
 }
 
 .page-actions {
@@ -212,9 +279,9 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 14px;
+  padding: 7px 11px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 6px;
   color: var(--muted);
   font-size: 12px;
   background: var(--surface);
@@ -253,12 +320,19 @@ textarea {
 .workbench-main {
   min-width: 0;
   width: 100%;
-  max-width: 1340px;
-  margin: 0 auto;
-  padding: 34px clamp(20px, 3vw, 44px) 56px;
+  max-width: none;
+  margin: 0;
+  padding: 28px clamp(22px, 3vw, 48px) 56px;
   display: flex;
   flex-direction: column;
   gap: 22px;
+}
+
+.workbench-main > * {
+  width: 100%;
+  max-width: 1440px;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .page-heading {
@@ -266,27 +340,26 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 4px 2px 18px;
+  padding: 2px 2px 20px;
   border-bottom: 1px solid var(--line-soft);
 }
 
 .page-kicker {
   display: block;
-  margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  margin-bottom: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0;
 }
 
 .page-heading h1 {
   margin: 0;
   color: var(--ink);
-  font-size: clamp(24px, 3vw, 32px);
-  font-weight: 720;
+  font-size: clamp(25px, 3vw, 34px);
+  font-weight: 760;
   line-height: 1.15;
-  letter-spacing: -0.024em;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 
@@ -312,7 +385,7 @@ textarea {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--ink);
   padding: 5px 11px 5px 5px;
@@ -324,8 +397,8 @@ textarea {
   height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
-  background: var(--accent);
+  border-radius: 5px;
+  background: var(--ink);
   color: #fff;
   font-weight: 800;
 }
@@ -444,25 +517,25 @@ textarea {
 .section-title {
   margin: 0;
   font-size: 17px;
-  font-weight: 680;
+  font-weight: 720;
   line-height: 1.4;
-  letter-spacing: -0.014em;
+  letter-spacing: 0;
 }
 
 .panel,
 .chart-card {
   background: var(--surface);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
+  border-radius: 8px;
   box-shadow: var(--shadow-card);
 }
 
 .panel {
-  padding: 28px 30px;
+  padding: 25px 26px;
 }
 
 .chart-card {
-  padding: 20px 22px;
+  padding: 21px 22px;
   min-height: 320px;
 }
 
@@ -514,6 +587,55 @@ textarea {
   font-weight: 750;
 }
 
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-input-number {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px #b8c4cc inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.el-upload-dragger {
+  min-height: 172px;
+  display: grid;
+  align-content: center;
+  border: 1px dashed #b9c7d0;
+  border-radius: 7px;
+  background: #f8fafb;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.el-upload-dragger:hover {
+  border-color: var(--accent);
+  background: #f4f7fd;
+}
+
+.el-tag {
+  border-radius: 5px;
+  font-weight: 650;
+}
+
+.el-tabs__item {
+  font-weight: 650;
+}
+
+.el-dialog {
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(27, 39, 50, 0.18);
+}
+
 .metric-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -528,10 +650,23 @@ textarea {
 }
 
 .metric-card {
+  position: relative;
+  min-height: 126px;
   padding: 20px 22px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-3);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.metric-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 46px;
+  height: 4px;
+  background: var(--accent-2);
 }
 
 .metric-title {
@@ -542,8 +677,8 @@ textarea {
 
 .metric-value {
   font-size: 30px;
-  font-weight: 750;
-  letter-spacing: -0.025em;
+  font-weight: 760;
+  letter-spacing: 0;
   margin-bottom: 5px;
 }
 
@@ -686,7 +821,8 @@ textarea {
 }
 
 .data-table {
-  padding: 6px;
+  overflow: hidden;
+  padding: 0;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -698,9 +834,21 @@ textarea {
   --el-table-row-hover-bg-color: var(--accent-soft);
 }
 
+.data-table .el-table th.el-table__cell {
+  height: 44px;
+  color: #596674;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.data-table .el-table td.el-table__cell {
+  height: 48px;
+  color: var(--ink-2);
+}
+
 .el-button {
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 6px;
+  font-weight: 650;
 }
 
 .el-button,
@@ -1316,13 +1464,39 @@ textarea {
   .console-sidebar {
     position: static;
     height: auto;
+    gap: 10px;
+    padding: 12px 14px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 
+  .sidebar-brand {
+    padding: 0 4px 10px;
+  }
+
+  .sidebar-label,
+  .sidebar-foot {
+    display: none;
+  }
+
   .sidebar-nav {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    overflow-x: auto;
+  }
+
+  .sidebar-nav a {
+    flex: 0 0 auto;
+  }
+
+  .sidebar-nav a.router-link-active::before {
+    top: auto;
+    right: 12px;
+    bottom: 0;
+    left: 12px;
+    width: auto;
+    height: 2px;
   }
 
   .page-heading {

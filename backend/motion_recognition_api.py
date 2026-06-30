@@ -17,7 +17,7 @@ RECOGNIZER_ROOT = PROJECT_ROOT / "backend" / "motion_recognition"
 MODEL_PATH = PROJECT_ROOT / "models" / "motion_recognition" / "motion_model.pkl"
 PAPB_ROOT = PROJECT_ROOT / "motion" / "motion"
 PAPB_MODEL = PAPB_ROOT / "papb_trained_model.json"
-PAPB_DATASET = PAPB_ROOT / "papb_synthetic_sequences.json"
+PAPB_DATASET = PAPB_ROOT / "papb_competition_sequences.json"
 
 if str(RECOGNIZER_ROOT) not in sys.path:
     sys.path.insert(0, str(RECOGNIZER_ROOT))
@@ -35,6 +35,7 @@ router = APIRouter(prefix="/api/motion-recognition", tags=["motion-recognition"]
 
 _MODEL_CACHE = None
 _PAPB_CACHE = None
+_PAPB_CACHE_MTIME = None
 
 
 def _load_recognition_model():
@@ -47,13 +48,15 @@ def _load_recognition_model():
 
 
 def _load_papb_validator() -> PapbValidator | None:
-    global _PAPB_CACHE
-    if _PAPB_CACHE is not None:
-        return _PAPB_CACHE
+    global _PAPB_CACHE, _PAPB_CACHE_MTIME
     source = PAPB_MODEL if PAPB_MODEL.exists() else PAPB_DATASET
     if not source.exists():
         return None
+    source_mtime = source.stat().st_mtime_ns
+    if _PAPB_CACHE is not None and _PAPB_CACHE_MTIME == source_mtime:
+        return _PAPB_CACHE
     _PAPB_CACHE = PapbValidator.from_json(source, require_terminal=False)
+    _PAPB_CACHE_MTIME = source_mtime
     return _PAPB_CACHE
 
 
@@ -92,9 +95,10 @@ def health() -> Dict[str, object]:
 def recognize_motion_file(
     file: UploadFile = File(...),
     mode: str = Form("sequence"),
-    method: str = Form("dp"),
+    method: str = Form("command"),
     transcript: Optional[str] = Form(None),
     validate_flow: bool = Form(True),
+    scenario: str = Form("general"),
     min_segment_s: float = Form(0.25),
     max_segment_s: Optional[float] = Form(None),
     step_s: float = Form(0.5),
@@ -109,8 +113,11 @@ def recognize_motion_file(
     method = method.strip().lower()
     if mode not in {"single", "sequence"}:
         raise HTTPException(status_code=400, detail="mode must be single or sequence")
-    if method not in {"dp", "activity", "scan", "scripted"}:
-        raise HTTPException(status_code=400, detail="method must be dp/activity/scan/scripted")
+    if method not in {"dp", "activity", "scan", "scripted", "command"}:
+        raise HTTPException(
+            status_code=400,
+            detail="method must be dp/activity/scan/scripted/command",
+        )
 
     run_id = uuid.uuid4().hex[:10]
     content = file.file.read()
@@ -142,13 +149,18 @@ def recognize_motion_file(
     if validate_flow and labels:
         validator = _load_papb_validator()
         if validator is not None:
-            papb_result = validator.validate_sequence(labels, require_terminal=False)
+            papb_result = validator.validate_sequence(
+                labels,
+                require_terminal=False,
+                scenario=scenario,
+            )
 
     summary = {
         "mode": mode,
         "method": method if mode == "sequence" else "single",
         "label_count": len(labels),
         "labels": labels,
+        "scenario": scenario,
         "flow_status": (papb_result or {}).get("status") if papb_result else None,
         "flow_valid": (papb_result or {}).get("valid") if papb_result else None,
     }
@@ -170,6 +182,7 @@ def recognize_motion_file(
             "method": method,
             "transcript": transcript,
             "validate_flow": validate_flow,
+            "scenario": scenario,
             "min_segment_s": min_segment_s,
             "max_segment_s": max_segment_s,
             "step_s": step_s,

@@ -16,13 +16,21 @@ from backend.auth import optional_user
 from backend.ai_report import router as ai_report_router
 from backend.auth_api import router as auth_router
 from backend.db import create_task, init_db
-from backend.etbert_api.main import app as etbert_app
 from backend.motion_api import router as motion_router
 from backend.motion_recognition_api import router as motion_recognition_router
 from backend.papb_api import router as papb_router
 from backend.side_channel_api import router as side_channel_router
 from backend.side_channel_judge import router as side_channel_judge_router
 from backend.tasks_api import router as tasks_router
+
+try:
+    from backend.etbert_api.main import app as etbert_app
+    from backend.etbert_api.main import preload_models as preload_etbert_models
+    ETBERT_IMPORT_ERROR = None
+except Exception as exc:  # ET-BERT is optional when model/runtime dependencies are absent.
+    etbert_app = None
+    preload_etbert_models = None
+    ETBERT_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PAYLOAD_ROOT = PROJECT_ROOT / "payload-detection"
@@ -49,14 +57,15 @@ app.include_router(motion_router)
 app.include_router(motion_recognition_router)
 app.include_router(papb_router)
 app.include_router(tasks_router)
-app.mount("/api/etbert", etbert_app)
+if etbert_app is not None:
+    app.mount("/api/etbert", etbert_app)
 init_db()
 
 
 @app.on_event("startup")
 def startup():
-    from backend.etbert_api.main import preload_models
-    preload_models()
+    if preload_etbert_models is not None:
+        preload_etbert_models()
 
 
 def _read_csv_preview(csv_path: Path, max_rows: int = 200) -> List[Dict[str, str]]:
@@ -71,10 +80,12 @@ def _read_csv_preview(csv_path: Path, max_rows: int = 200) -> List[Dict[str, str
 
 
 @app.get("/health")
-def health() -> Dict[str, str]:
+def health() -> Dict[str, object]:
     return {
         "status": "ok",
         "service": "payload-backend",
+        "etbert_available": etbert_app is not None,
+        "etbert_error": ETBERT_IMPORT_ERROR,
     }
 
 

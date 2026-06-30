@@ -14,7 +14,7 @@ from backend.db import create_task
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PAPB_ROOT = PROJECT_ROOT / "motion" / "motion"
-DEFAULT_DATASET = PAPB_ROOT / "papb_synthetic_sequences.json"
+DEFAULT_DATASET = PAPB_ROOT / "papb_competition_sequences.json"
 DEFAULT_MODEL = PAPB_ROOT / "papb_trained_model.json"
 DEFAULT_REVIEW = PAPB_ROOT / "papb_pending_review.json"
 
@@ -24,6 +24,53 @@ if str(PAPB_ROOT) not in sys.path:
 from papb_validator import PapbValidator, add_pending_review, review_sequence  # noqa: E402
 
 router = APIRouter(prefix="/api/papb", tags=["papb"])
+
+ACTION_ALIASES = {
+    "down": "stand",
+    "up": "stand",
+    "lie_down": "stand",
+    "posture_toggle": "stand",
+    "back": "move",
+    "backward": "move",
+    "forword": "move",
+    "forward": "move",
+    "left": "move",
+    "right": "move",
+    "walk": "move",
+    "walk_slow": "move",
+    "walk_mid": "move",
+    "run_fast": "move",
+    "step": "moonwalk",
+    "twist_body": "twistBody",
+    "twistbody": "twistBody",
+    "side_jump": "twistJump",
+    "twist_jump": "twistJump",
+    "forward_jump": "jump",
+    "dance": "dance1",
+    "dance2": "dance1",
+    "站立": "stand",
+    "趴下": "stand",
+    "蹲下": "stand",
+    "移动": "move",
+    "前进": "move",
+    "后退": "move",
+    "左移": "move",
+    "右移": "move",
+    "太空步": "moonwalk",
+    "打招呼": "hello",
+    "前跳": "jump",
+    "扭身体": "twistBody",
+    "扭身跳": "twistJump",
+    "后空翻": "backflip",
+    "跳舞": "dance1",
+}
+
+
+def _canonical_action_label(value: object) -> str:
+    label = str(value).strip()
+    if not label:
+        return ""
+    return ACTION_ALIASES.get(label, ACTION_ALIASES.get(label.lower(), label))
 
 
 class ActionItem(BaseModel):
@@ -39,6 +86,7 @@ class DetectRequest(BaseModel):
     require_terminal: bool = True
     save_history: bool = True
     source: str = "manual"
+    scenario: str = "general"
 
 
 class ReviewRequest(BaseModel):
@@ -56,6 +104,14 @@ class RetrainRequest(BaseModel):
 class TrainingSequenceRequest(BaseModel):
     actions: List[str] = Field(default_factory=list)
     note: str = ""
+
+
+class NextActionRequest(BaseModel):
+    history: List[str] = Field(default_factory=list)
+    sequence: str = ""
+    actual_action: Optional[str] = None
+    top_k: int = Field(default=5, ge=1, le=20)
+    scenario: str = "general"
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -92,16 +148,20 @@ def _normalize_actions(payload: DetectRequest) -> List[Union[str, Dict[str, Any]
         normalized: List[Union[str, Dict[str, Any]]] = []
         for item in payload.actions:
             if isinstance(item, str):
-                label = item.strip()
+                label = _canonical_action_label(item)
                 if label:
                     normalized.append(label)
             else:
                 data = _model_dump(item)
-                data["label"] = data.get("label", "").strip()
+                data["label"] = _canonical_action_label(data.get("label", ""))
                 if data["label"]:
                     normalized.append(data)
         return normalized
-    return _parse_sequence_text(payload.sequence)
+    return [
+        label
+        for item in _parse_sequence_text(payload.sequence)
+        if (label := _canonical_action_label(item))
+    ]
 
 
 def _labels(actions: List[Union[str, Dict[str, Any]]]) -> List[str]:
@@ -151,6 +211,7 @@ def _summary() -> Dict[str, Any]:
     review = _pending_store()
     templates = _templates()
     training_sequences = dataset.get("training_sequences") or dataset.get("normal_sequences") or []
+    expert_sequences = dataset.get("expert_sequences") or []
     actions = sorted({action for template in templates for action in template})
     return {
         "dataset_path": str(DEFAULT_DATASET),
@@ -159,10 +220,15 @@ def _summary() -> Dict[str, Any]:
         "model_exists": DEFAULT_MODEL.exists(),
         "template_count": len(templates),
         "training_sequence_count": len(training_sequences),
+        "expert_sequence_count": len(expert_sequences),
         "action_count": len(actions),
         "actions": actions,
         "critical_actions": model.get("critical_actions", dataset.get("critical_actions", [])),
         "noncritical_actions": model.get("noncritical_actions", dataset.get("noncritical_actions", [])),
+        "transition_source_count": len(model.get("transition_matrix", {})),
+        "context_count": len(model.get("context_transitions", {})),
+        "embedding_count": len(model.get("embedding_centers", {})),
+        "forbidden_rule_count": len(model.get("forbidden_transitions", [])),
         "pending_count": len([item for item in review["pending"] if item.get("status") == "PENDING"]),
         "reviewed_count": len(review["reviewed"]),
     }
@@ -194,15 +260,28 @@ def model_detail() -> Dict[str, Any]:
         "normal_templates": _templates(),
         "training_sequences": dataset.get("training_sequences", []),
         "evaluation_sequences": dataset.get("evaluation_sequences", []),
+        "expert_sequences": dataset.get("expert_sequences", []),
         "max_repeats": model.get("max_repeats", dataset.get("max_repeats", {})),
         "critical_actions": model.get("critical_actions", dataset.get("critical_actions", [])),
         "noncritical_actions": model.get("noncritical_actions", dataset.get("noncritical_actions", [])),
+        "transition_matrix": model.get("transition_matrix", {}),
+        "context_transitions": model.get("context_transitions", {}),
+        "context_support": model.get("context_support", {}),
+        "embedding_centers": model.get("embedding_centers", {}),
+        "embedding_kind": model.get("embedding_kind", "external"),
+        "forbidden_transitions": model.get("forbidden_transitions", []),
+        "scenario_rules": model.get("scenario_rules", {}),
+        "transition_risk_threshold": model.get("transition_risk_threshold", 0.15),
     }
 
 
 @router.post("/training-sequences")
 def add_training_sequence(payload: TrainingSequenceRequest) -> Dict[str, Any]:
-    actions = [str(action).strip() for action in payload.actions if str(action).strip()]
+    actions = [
+        label
+        for action in payload.actions
+        if (label := _canonical_action_label(action))
+    ]
     if not actions:
         raise HTTPException(status_code=400, detail="请至少提供一个动作标签")
 
@@ -227,9 +306,14 @@ def detect_sequence(
         raise HTTPException(status_code=400, detail="请至少输入一个动作标签")
 
     validator = _load_validator()
-    result = validator.validate_sequence(actions, require_terminal=payload.require_terminal)
+    result = validator.validate_sequence(
+        actions,
+        require_terminal=payload.require_terminal,
+        scenario=payload.scenario,
+    )
     result["input_actions"] = labels
     result["source"] = payload.source
+    result["scenario"] = payload.scenario
 
     if payload.auto_review and result.get("status") == "UNKNOWN_VALIDITY":
         result["review"] = add_pending_review(
@@ -250,6 +334,7 @@ def detect_sequence(
                 "auto_review": payload.auto_review,
                 "require_terminal": payload.require_terminal,
                 "source": payload.source,
+                "scenario": payload.scenario,
             },
             summary=_task_summary(result),
             result=result,
@@ -257,6 +342,28 @@ def detect_sequence(
             user_id=int(user["id"]) if isinstance(user, dict) else None,
         )
     return result
+
+
+@router.post("/predict-next")
+def predict_next_action(payload: NextActionRequest) -> Dict[str, Any]:
+    history = payload.history or _parse_sequence_text(payload.sequence)
+    history = [
+        label
+        for action in history
+        if (label := _canonical_action_label(action))
+    ]
+    actual = (
+        _canonical_action_label(payload.actual_action)
+        if payload.actual_action
+        else None
+    )
+    validator = _load_validator()
+    return validator.predict_next_actions(
+        history,
+        actual_action=actual,
+        top_k=payload.top_k,
+        scenario=payload.scenario,
+    )
 
 
 @router.get("/review/pending")
