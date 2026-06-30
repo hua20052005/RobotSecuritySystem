@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 
@@ -11,6 +11,7 @@ const selectedFile = ref(null)
 const modelMode = ref('packet')
 const maxPackets = ref(500)
 const loading = ref(false)
+const reportLoading = ref(false)
 const result = ref(null)
 
 // ── 图表 refs ─────
@@ -47,6 +48,31 @@ const threatColor = (label) => {
   return d[label] || '#6b7280'
 }
 
+// ── 检测摘要文本 ─────
+const summaryText = computed(() => {
+  if (!result.value) return ''
+  const r = result.value
+  const total = r.total_samples || 0
+  const abnormal = Object.entries(r.summary || {}).filter(([k]) => !k.startsWith('正常')).reduce((s, [, v]) => s + v, 0)
+  const normal = total - abnormal
+  const abnormalRatio = r.abnormal_ratio || 0
+  const modelLabel = r.model_type === 'packet' ? '包级' : '流级'
+  const lowConf = r.low_confidence_count || 0
+
+  // 找出异常最多的类型
+  const topAbnormal = Object.entries(r.summary || {}).filter(([k]) => !k.startsWith('正常'))
+    .sort(([, a], [, b]) => b - a)
+  const topList = topAbnormal.slice(0, 3).map(([k, v]) => `${k}(${v}个)`).join('、')
+
+  let level = '正常', levelColor = '#22c55e', advice = ''
+  if (abnormalRatio > 20) { level = '高危', levelColor = '#ef4444'; advice = '建议立即对该控制链路进行断网隔离，并排查异常来源。' }
+  else if (abnormalRatio > 5) { level = '可疑', levelColor = '#f97316'; advice = '建议对异常包进行回溯分析，确认是否为攻击行为。' }
+  else if (abnormalRatio > 0) { level = '低风险', levelColor = '#eab308'; advice = '少量异常包可能来源于操控噪声或环境干扰，建议持续监控。' }
+  else { level = '正常', levelColor = '#22c55e'; advice = '当前流量未见明显异常，控制链路通信正常。' }
+
+  return { total, abnormal, normal, abnormalRatio, modelLabel, lowConf, topAbnormal, topList, level, levelColor, advice }
+})
+
 const protoColors = { 'UDP': '#3b82f6', 'TCP': '#f97316', 'Other': '#9ca3af' }
 
 const onModelSwitch = () => {
@@ -77,6 +103,43 @@ const runDetection = async () => {
     ElMessage.error(msg)
   } finally {
     loading.value = false
+  }
+}
+
+// ── 下载检测报告 ─────
+const downloadReport = async () => {
+  if (!selectedFile.value) { ElMessage.warning('请先上传 .pcap 文件'); return }
+  reportLoading.value = true
+  const formData = new FormData()
+  formData.append('file', selectedFile.value)
+  formData.append('max_packets', maxPackets.value.toString())
+  const url = modelMode.value === 'packet'
+    ? '/api/etbert/report/packet'
+    : '/api/etbert/report/flow'
+  try {
+    const { data } = await api.post(url, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
+    })
+    const rows = data.report || []
+    let csv = 'packet_index,protocol,anomaly_prob\n'
+    for (const r of rows) {
+      csv += `${r.packet_index},${r.protocol},${r.anomaly_prob !== null ? r.anomaly_prob : ''}\n`
+    }
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `etbert_report_${data.run_id || 'result'}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+    ElMessage.success('检测报告已下载')
+  } catch (error) {
+    let msg = '报告生成失败'
+    if (error.code === 'ECONNABORTED') msg = '请求超时，请降低最大包数'
+    else if (error.response?.data?.detail) msg = typeof error.response.data.detail === 'string' ? error.response.data.detail : JSON.stringify(error.response.data.detail)
+    ElMessage.error(msg)
+  } finally {
+    reportLoading.value = false
   }
 }
 
@@ -217,6 +280,9 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
           <el-button type="primary" :loading="loading" @click="runDetection">
             {{ loading ? '检测中...' : '开始检测' }}
           </el-button>
+          <el-button v-if="result" type="success" :loading="reportLoading" @click="downloadReport" style="margin-left:8px">
+            {{ reportLoading ? '生成中...' : '下载检测报告' }}
+          </el-button>
         </div>
       </div>
     </div>
@@ -235,6 +301,27 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
         :subtitle="result.abnormal_ratio > 10 ? '⚠ 高异常率' : '✓ 正常范围'" />
       <MetricCard title="低置信度告警" :value="(result.low_confidence_count || 0) + ' 条'"
         subtitle="置信度 < 50%，可能为未知攻击" />
+    </div>
+
+    <!-- 检测摘要 -->
+    <div class="summary-card" :style="{ borderLeftColor: summaryText.levelColor }">
+      <div class="summary-header">
+        <span class="summary-level" :style="{ background: summaryText.levelColor }">
+          {{ summaryText.level }}
+        </span>
+        <span class="summary-title">{{ summaryText.modelLabel }}检测报告</span>
+      </div>
+      <p class="summary-body">
+        本次{{ summaryText.modelLabel }}检测共处理 <b>{{ summaryText.total.toLocaleString() }}</b> 个{{ summaryText.modelLabel === '包级' ? '包' : '流窗口' }}，
+        其中正常 <b>{{ summaryText.normal.toLocaleString() }}</b> 个{{ summaryText.modelLabel === '包级' ? '包' : '流窗口' }}，
+        检出异常 <b>{{ summaryText.abnormal.toLocaleString() }}</b> 个{{ summaryText.modelLabel === '包级' ? '包' : '流窗口' }}，
+        异常占比 <b>{{ summaryText.abnormalRatio.toFixed(2) }}%</b>。
+        <template v-if="summaryText.abnormal > 0">
+          主要异常类型：{{ summaryText.topList }}。
+        </template>
+        低置信度告警 {{ summaryText.lowConf }} 条。
+        {{ summaryText.advice }}
+      </p>
     </div>
   </section>
 

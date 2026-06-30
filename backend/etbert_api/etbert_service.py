@@ -170,8 +170,11 @@ class ETBertService:
 
     # ── pcap 解析 ────────────────────────────────────
     def _parse_pcap(self, pcap_path: str, max_pkts: int):
-        """解析 pcap，返回 (payloads, timestamps, proto_stats)"""
+        """解析 pcap，返回 (payloads, timestamps, proto_stats, pkt_records)
+        pkt_records: list of (index, protocol_label, payload_bytes_or_None)
+        """
         payloads, timestamps = [], []
+        pkt_records = []
         proto_counts = {"UDP": 0, "TCP": 0, "Other": 0}
         port_counts = collections.Counter()
         size_dist = []
@@ -183,35 +186,41 @@ class ETBertService:
             if i >= max_pkts: break
             total_read += 1
 
-            # 协议统计
             if pkt.haslayer(scapy.UDP):
                 proto_counts["UDP"] += 1
                 port_counts[pkt[scapy.UDP].dport] += 1
+                proto = "UDP"
             elif pkt.haslayer(scapy.TCP):
                 proto_counts["TCP"] += 1
                 port_counts[pkt[scapy.TCP].dport] += 1
+                proto = "TCP"
+                pkt_records.append((i, proto, None))
                 skipped_non_udp += 1
                 continue
             else:
                 proto_counts["Other"] += 1
+                proto = "Other"
+                pkt_records.append((i, proto, None))
                 skipped_non_udp += 1
                 continue
 
             try:
                 pl = bytes(pkt[scapy.Raw].load) if pkt.haslayer(scapy.Raw) else bytes(pkt[scapy.UDP].payload)
             except Exception:
+                pkt_records.append((i, proto, None))
                 skipped_non_udp += 1
                 continue
             if len(pl) == 0:
+                pkt_records.append((i, proto, None))
                 skipped_empty += 1
                 continue
             original_len = len(pl)
             size_dist.append(original_len)
             pl = pl + b"\x00" * (PAD_LEN - len(pl)) if len(pl) < PAD_LEN else pl[:PAD_LEN]
+            pkt_records.append((i, proto, bytes(pl)))
             payloads.append(np.frombuffer(pl, dtype=np.uint8))
             timestamps.append(float(pkt.time))
 
-        # 包大小分布统计
         size_bins = {"<50B": 0, "50-200B": 0, "200-380B": 0, "=380B": 0, ">380B": 0}
         for s in size_dist:
             if s < 50: size_bins["<50B"] += 1
@@ -229,7 +238,7 @@ class ETBertService:
             "top_ports": dict(port_counts.most_common(5)),
             "payload_size_distribution": size_bins,
         }
-        return payloads, timestamps, proto_stats
+        return payloads, timestamps, proto_stats, pkt_records
 
     def _pkt_to_bigram(self, p: np.ndarray) -> str:
         hs = p.astype(np.uint8).tobytes().hex()
@@ -247,7 +256,7 @@ class ETBertService:
         cfg = MODEL_DEFS[key]
         self.load_model(key)
         labels = cfg["labels"]
-        payloads, timestamps, proto_stats = self._parse_pcap(pcap_path, max_packets)
+        payloads, timestamps, proto_stats, pkt_records = self._parse_pcap(pcap_path, max_packets)
 
         if cfg["type"] == "packet":
             texts = [self._pkt_to_bigram(p) for p in payloads]
@@ -275,6 +284,62 @@ class ETBertService:
             abnormal_ratio=round(abnormal / len(preds) * 100, 2) if preds else 0.0,
             proto_stats=proto_stats,
         )
+
+    def generate_report(self, key: str, pcap_path: str, max_packets: int = 5000) -> list[dict]:
+        """生成检测报告：每条通信包一行，含包序号、协议、异常概率。
+        非 UDP 协议异常概率为空（null）。
+        流级时窗口异常概率标注到窗口内每条通信包上。
+        """
+        cfg = MODEL_DEFS[key]
+        self.load_model(key)
+        labels = cfg["labels"]
+        payloads, timestamps, proto_stats, pkt_records = self._parse_pcap(pcap_path, max_packets)
+
+        # 所有包（含非 UDP）初始化异常概率为空
+        report = []
+        udp_indices = []  # payloads 中到 pkt_records 的映射
+        for idx, proto, raw in pkt_records:
+            entry = {"packet_index": idx, "protocol": proto, "anomaly_prob": None}
+            report.append(entry)
+            if raw is not None:
+                udp_indices.append(idx)
+
+        if not payloads:
+            return report
+
+        if cfg["type"] == "packet":
+            # 包级：批量推理，每个 UDP 包异常概率 = 1 - P(正常|label=0)
+            texts = [self._pkt_to_bigram(p) for p in payloads]
+            batch_preds = self._predict(key, texts)
+            for i, idx in enumerate(udp_indices):
+                normal_prob = batch_preds[i]["all_probs"].get(labels.get(0, labels[0]), 0) / 100.0
+                report[idx]["anomaly_prob"] = round(1.0 - normal_prob, 6)
+        else:
+            # 流级：批量推理窗口，异常概率标注到窗口内每条通信包
+            sampling = cfg.get("sampling", {})
+            bpp = sampling.get("bytes_per_pkt", 12)
+            flows = self._segment_flows(timestamps, payloads)
+            pl_to_idx = [udp_indices[i] for i in range(len(payloads))]
+            window_texts, window_meta = [], []
+            for fid, (s, e) in enumerate(flows):
+                arr = np.stack(payloads[s:e], axis=0)
+                for w in range(0, arr.shape[0] - SEQ_LEN + 1, 8):
+                    window_texts.append(self._flow_to_bigram(arr[w:w+SEQ_LEN], bpp))
+                    window_meta.append((s + w, s + w + SEQ_LEN))
+
+            if window_texts:
+                batch_preds = self._predict(key, window_texts)
+                for wi, pred in enumerate(batch_preds):
+                    normal_prob = pred["all_probs"].get(labels.get(0, labels[0]), 0) / 100.0
+                    anom_prob = round(1.0 - normal_prob, 6)
+                    start_pl, end_pl = window_meta[wi]
+                    for pl_idx in range(start_pl, min(end_pl, len(pl_to_idx))):
+                        ridx = pl_to_idx[pl_idx]
+                        cur = report[ridx]["anomaly_prob"]
+                        if cur is None or anom_prob > cur:
+                            report[ridx]["anomaly_prob"] = anom_prob
+
+        return report
 
     def _segment_flows(self, timestamps, payloads):
         flows, start = [], 0

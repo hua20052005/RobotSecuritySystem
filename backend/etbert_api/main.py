@@ -60,6 +60,44 @@ async def detect_flow(
     return await _run_detect(file, "flow", max_packets)
 
 
+@app.post("/report/packet")
+async def report_packet(
+    file: UploadFile = File(...),
+    max_packets: int = Form(5000),
+):
+    """包级检测报告：每包一行，含序号、协议、异常概率"""
+    return await _run_report(file, "packet", max_packets)
+
+
+@app.post("/report/flow")
+async def report_flow(
+    file: UploadFile = File(...),
+    max_packets: int = Form(5000),
+):
+    """流级检测报告：每包一行，窗口异常概率标注到窗口内每条包"""
+    return await _run_report(file, "flow", max_packets)
+
+
+async def _run_report(file: UploadFile, model_key: str, max_packets: int):
+    suffix = Path(file.filename or "upload.pcap").suffix.lower()
+    if suffix not in {".pcap", ".pcapng"}:
+        raise HTTPException(400, "仅支持 .pcap / .pcapng")
+    run_id = uuid.uuid4().hex[:10]
+    input_path = RUN_DIR / f"{run_id}{suffix}"
+    input_path.write_bytes(await file.read())
+    try:
+        report = etbert.generate_report(model_key, str(input_path), max_packets)
+    except Exception as exc:
+        logger.exception("ET-BERT report failed")
+        raise HTTPException(500, f"报告生成失败: {exc}")
+    return {
+        "run_id": run_id,
+        "model": model_key,
+        "total_packets": len(report),
+        "report": report,
+    }
+
+
 async def _run_detect(file: UploadFile, model_key: str, max_packets: int):
     suffix = Path(file.filename or "upload.pcap").suffix.lower()
     if suffix not in {".pcap", ".pcapng"}:
