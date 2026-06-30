@@ -105,6 +105,13 @@ class TrainingSequenceRequest(BaseModel):
     note: str = ""
 
 
+class NextActionRequest(BaseModel):
+    history: List[str] = Field(default_factory=list)
+    sequence: str = ""
+    actual_action: Optional[str] = None
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
 def _read_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
@@ -202,6 +209,7 @@ def _summary() -> Dict[str, Any]:
     review = _pending_store()
     templates = _templates()
     training_sequences = dataset.get("training_sequences") or dataset.get("normal_sequences") or []
+    expert_sequences = dataset.get("expert_sequences") or []
     actions = sorted({action for template in templates for action in template})
     return {
         "dataset_path": str(DEFAULT_DATASET),
@@ -210,10 +218,15 @@ def _summary() -> Dict[str, Any]:
         "model_exists": DEFAULT_MODEL.exists(),
         "template_count": len(templates),
         "training_sequence_count": len(training_sequences),
+        "expert_sequence_count": len(expert_sequences),
         "action_count": len(actions),
         "actions": actions,
         "critical_actions": model.get("critical_actions", dataset.get("critical_actions", [])),
         "noncritical_actions": model.get("noncritical_actions", dataset.get("noncritical_actions", [])),
+        "transition_source_count": len(model.get("transition_matrix", {})),
+        "context_count": len(model.get("context_transitions", {})),
+        "embedding_count": len(model.get("embedding_centers", {})),
+        "forbidden_rule_count": len(model.get("forbidden_transitions", [])),
         "pending_count": len([item for item in review["pending"] if item.get("status") == "PENDING"]),
         "reviewed_count": len(review["reviewed"]),
     }
@@ -245,9 +258,17 @@ def model_detail() -> Dict[str, Any]:
         "normal_templates": _templates(),
         "training_sequences": dataset.get("training_sequences", []),
         "evaluation_sequences": dataset.get("evaluation_sequences", []),
+        "expert_sequences": dataset.get("expert_sequences", []),
         "max_repeats": model.get("max_repeats", dataset.get("max_repeats", {})),
         "critical_actions": model.get("critical_actions", dataset.get("critical_actions", [])),
         "noncritical_actions": model.get("noncritical_actions", dataset.get("noncritical_actions", [])),
+        "transition_matrix": model.get("transition_matrix", {}),
+        "context_transitions": model.get("context_transitions", {}),
+        "context_support": model.get("context_support", {}),
+        "embedding_centers": model.get("embedding_centers", {}),
+        "embedding_kind": model.get("embedding_kind", "external"),
+        "forbidden_transitions": model.get("forbidden_transitions", []),
+        "transition_risk_threshold": model.get("transition_risk_threshold", 0.15),
     }
 
 
@@ -312,6 +333,27 @@ def detect_sequence(
             user_id=int(user["id"]) if isinstance(user, dict) else None,
         )
     return result
+
+
+@router.post("/predict-next")
+def predict_next_action(payload: NextActionRequest) -> Dict[str, Any]:
+    history = payload.history or _parse_sequence_text(payload.sequence)
+    history = [
+        label
+        for action in history
+        if (label := _canonical_action_label(action))
+    ]
+    actual = (
+        _canonical_action_label(payload.actual_action)
+        if payload.actual_action
+        else None
+    )
+    validator = _load_validator()
+    return validator.predict_next_actions(
+        history,
+        actual_action=actual,
+        top_k=payload.top_k,
+    )
 
 
 @router.get("/review/pending")

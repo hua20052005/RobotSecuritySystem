@@ -502,6 +502,198 @@
       ]
     }
   ],
+  "expert_sequences": [
+    {
+      "id": "expert:idle_move_recover",
+      "source": "expert_augmented",
+      "scene": "基础移动并恢复站立",
+      "actions": ["stand", "move", "stand"]
+    },
+    {
+      "id": "expert:patrol_greet",
+      "source": "expert_augmented",
+      "scene": "移动巡检后交互",
+      "actions": ["stand", "move", "hello", "stand"]
+    },
+    {
+      "id": "expert:move_jump_recover",
+      "source": "expert_augmented",
+      "scene": "移动后跳跃并恢复",
+      "actions": ["stand", "move", "jump", "stand"]
+    },
+    {
+      "id": "expert:move_twist_recover",
+      "source": "expert_augmented",
+      "scene": "移动后扭身并恢复",
+      "actions": ["stand", "move", "twistBody", "stand"]
+    },
+    {
+      "id": "expert:greet_twist_recover",
+      "source": "expert_augmented",
+      "scene": "交互展示",
+      "actions": ["stand", "hello", "twistBody", "stand"]
+    },
+    {
+      "id": "expert:greet_move_recover",
+      "source": "expert_augmented",
+      "scene": "交互后短距离移动",
+      "actions": ["stand", "hello", "move", "stand"]
+    },
+    {
+      "id": "expert:moonwalk_recover",
+      "source": "expert_augmented",
+      "scene": "太空步展示并恢复",
+      "actions": ["stand", "moonwalk", "stand"]
+    },
+    {
+      "id": "expert:dance_recover",
+      "source": "expert_augmented",
+      "scene": "舞蹈展示并恢复",
+      "actions": ["stand", "dance1", "stand"]
+    },
+    {
+      "id": "expert:dance_move_recover",
+      "source": "expert_augmented",
+      "scene": "舞蹈后移动恢复",
+      "actions": ["stand", "dance1", "move", "stand"]
+    },
+    {
+      "id": "expert:twist_jump_recover",
+      "source": "expert_augmented",
+      "scene": "扭身跳并恢复",
+      "actions": ["stand", "twistBody", "twistJump", "stand"]
+    },
+    {
+      "id": "expert:twist_recover",
+      "source": "expert_augmented",
+      "scene": "扭身并恢复",
+      "actions": ["stand", "twistBody", "stand"]
+    },
+    {
+      "id": "expert:jump_recover",
+      "source": "expert_augmented",
+      "scene": "原地跳跃并恢复",
+      "actions": ["stand", "jump", "stand"]
+    },
+    {
+      "id": "expert:backflip_recover",
+      "source": "expert_augmented",
+      "scene": "后空翻并恢复",
+      "actions": ["stand", "backflip", "stand"]
+    },
+    {
+      "id": "expert:move_backflip_recover",
+      "source": "expert_augmented",
+      "scene": "移动后空翻并减速恢复",
+      "actions": ["stand", "move", "backflip", "move", "stand"]
+    },
+    {
+      "id": "expert:moonwalk_greet_recover",
+      "source": "expert_augmented",
+      "scene": "太空步与招手组合",
+      "actions": ["stand", "moonwalk", "hello", "stand"]
+    },
+    {
+      "id": "expert:moonwalk_move_recover",
+      "source": "expert_augmented",
+      "scene": "太空步后移动恢复",
+      "actions": ["stand", "moonwalk", "move", "stand"]
+    },
+    {
+      "id": "expert:continuous_move_recover",
+      "source": "expert_augmented",
+      "scene": "连续移动并恢复",
+      "actions": ["stand", "move", "move", "stand"]
+    },
+    {
+      "id": "expert:greet_jump_recover",
+      "source": "expert_augmented",
+      "scene": "招手后跳跃展示",
+      "actions": ["stand", "hello", "jump", "stand"]
+    }
+  ],
+  "evaluation_sequences": [
+    {
+      "id": "eval:normal_patrol_greet",
+      "expected_status": "NORMAL",
+      "actions": ["stand", "move", "hello", "stand"]
+    },
+    {
+      "id": "eval:normal_move_jump",
+      "expected_status": "NORMAL",
+      "actions": ["stand", "move", "jump", "stand"]
+    },
+    {
+      "id": "eval:normal_twist_jump",
+      "expected_status": "NORMAL",
+      "actions": ["stand", "twistBody", "twistJump", "stand"]
+    },
+    {
+      "id": "eval:normal_moonwalk_greet",
+      "expected_status": "NORMAL",
+      "actions": ["stand", "moonwalk", "hello", "stand"]
+    },
+    {
+      "id": "eval:normal_backflip_recovery",
+      "expected_status": "NORMAL",
+      "actions": ["stand", "move", "backflip", "move", "stand"]
+    },
+    {
+      "id": "eval:normal_dance_recovery",
+      "expected_status": "NORMAL",
+      "actions": ["stand", "dance1", "move", "stand"]
+    },
+    {
+      "id": "eval:unknown_safe_recombination",
+      "expected_status": "UNKNOWN_VALIDITY",
+      "actions": ["stand", "move", "moonwalk", "hello", "stand"]
+    },
+    {
+      "id": "eval:unknown_incomplete_but_plausible",
+      "expected_status": "UNKNOWN_VALIDITY",
+      "actions": ["stand", "move", "hello"]
+    },
+    {
+      "id": "eval:forbidden_double_backflip",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "backflip", "backflip", "stand"]
+    },
+    {
+      "id": "eval:forbidden_double_twist_jump",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "twistBody", "twistJump", "twistJump", "stand"]
+    },
+    {
+      "id": "eval:forbidden_backflip_to_twist_jump",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "backflip", "twistJump", "stand"]
+    },
+    {
+      "id": "eval:forbidden_twist_jump_to_backflip",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "twistBody", "twistJump", "backflip", "stand"]
+    },
+    {
+      "id": "eval:forbidden_jump_to_backflip",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "jump", "backflip", "stand"]
+    },
+    {
+      "id": "eval:forbidden_dance_to_backflip",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "dance1", "backflip", "stand"]
+    },
+    {
+      "id": "eval:invalid_start",
+      "expected_status": "ANOMALY",
+      "actions": ["move", "hello", "stand"]
+    },
+    {
+      "id": "eval:unknown_transition",
+      "expected_status": "ANOMALY",
+      "actions": ["stand", "dance1", "hello", "stand"]
+    }
+  ],
   "normal_templates": [
     [
       "stand",
@@ -705,6 +897,46 @@
     "stand",
     "move"
   ],
+  "forbidden_transitions": [
+    {
+      "from": "backflip",
+      "to": "backflip",
+      "rule": "后空翻后必须恢复姿态，禁止连续后空翻",
+      "score": 0.99
+    },
+    {
+      "from": "twistJump",
+      "to": "twistJump",
+      "rule": "扭身跳后必须恢复姿态，禁止连续扭身跳",
+      "score": 0.98
+    },
+    {
+      "from": "backflip",
+      "to": "twistJump",
+      "rule": "高冲击后空翻后不能直接衔接扭身跳",
+      "score": 0.96
+    },
+    {
+      "from": "twistJump",
+      "to": "backflip",
+      "rule": "扭身跳落地后不能直接衔接后空翻",
+      "score": 0.96
+    },
+    {
+      "from": "jump",
+      "to": "backflip",
+      "rule": "普通跳跃后应先恢复姿态再执行后空翻",
+      "score": 0.94
+    },
+    {
+      "from": "dance1",
+      "to": "backflip",
+      "rule": "舞蹈动作结束后应先恢复再执行后空翻",
+      "score": 0.93
+    }
+  ],
+  "context_max_order": 3,
+  "transition_risk_threshold": 0.08,
   "max_edit_distance": 1,
   "max_error_ratio": 0.25
 }

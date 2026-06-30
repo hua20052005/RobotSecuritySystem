@@ -58,6 +58,10 @@ class PapbValidator:
     embedding_thresholds: dict[str, float] | None = None
     embedding_weight: float = 0.35
     transition_matrix: dict[str, dict[str, float]] | None = None
+    context_transitions: dict[str, dict[str, float]] | None = None
+    context_support: dict[str, int] | None = None
+    context_max_order: int = 3
+    embedding_kind: str = "external"
     forbidden_transitions: object = None
     transition_risk_threshold: float = 0.15
     max_edit_distance: int = 0
@@ -101,6 +105,22 @@ class PapbValidator:
             "transition_matrix",
             self._normalize_transition_matrix(self.transition_matrix),
         )
+        object.__setattr__(
+            self,
+            "context_transitions",
+            self._normalize_transition_matrix(self.context_transitions),
+        )
+        object.__setattr__(
+            self,
+            "context_support",
+            {
+                str(key): int(value)
+                for key, value in (self.context_support or {}).items()
+                if str(key).strip()
+            },
+        )
+        object.__setattr__(self, "context_max_order", max(1, int(self.context_max_order or 1)))
+        object.__setattr__(self, "embedding_kind", str(self.embedding_kind or "external"))
         object.__setattr__(
             self,
             "forbidden_transitions",
@@ -167,6 +187,10 @@ class PapbValidator:
         embedding_thresholds: dict[str, float] | None = None,
         embedding_weight: float = 0.35,
         transition_matrix: dict[str, dict[str, float]] | None = None,
+        context_transitions: dict[str, dict[str, float]] | None = None,
+        context_support: dict[str, int] | None = None,
+        context_max_order: int = 3,
+        embedding_kind: str = "external",
         forbidden_transitions: object = None,
         transition_risk_threshold: float = 0.15,
         max_edit_distance: int = 0,
@@ -201,6 +225,10 @@ class PapbValidator:
             embedding_thresholds=embedding_thresholds or {},
             embedding_weight=embedding_weight,
             transition_matrix=transition_matrix or {},
+            context_transitions=context_transitions or {},
+            context_support=context_support or {},
+            context_max_order=context_max_order,
+            embedding_kind=embedding_kind,
             forbidden_transitions=forbidden_transitions,
             transition_risk_threshold=transition_risk_threshold,
             max_edit_distance=max_edit_distance,
@@ -229,6 +257,10 @@ class PapbValidator:
             embedding_thresholds=normalized["embedding_thresholds"],
             embedding_weight=float(normalized["embedding_weight"]),
             transition_matrix=normalized["transition_matrix"],
+            context_transitions=normalized["context_transitions"],
+            context_support=normalized["context_support"],
+            context_max_order=int(normalized["context_max_order"]),
+            embedding_kind=str(normalized["embedding_kind"]),
             forbidden_transitions=normalized["forbidden_transitions"],
             transition_risk_threshold=float(normalized["transition_risk_threshold"]),
             max_edit_distance=(
@@ -256,6 +288,9 @@ class PapbValidator:
         repeat_margin: int = 0,
         embedding_threshold_margin: float = 3.0,
         min_embedding_threshold: float = 0.15,
+        forbidden_transitions: object = None,
+        transition_risk_threshold: float = 0.15,
+        context_max_order: int = 3,
         end_action: str = END_ACTION,
         require_terminal: bool = True,
     ) -> "PapbValidator":
@@ -287,6 +322,19 @@ class PapbValidator:
             threshold_margin=embedding_threshold_margin,
             min_threshold=min_embedding_threshold,
         )
+        transition_matrix = cls._learn_transition_matrix(sequences, end_action=end_action)
+        context_transitions, context_support = cls._learn_context_transitions(
+            sequences,
+            max_order=context_max_order,
+            end_action=end_action,
+        )
+        embedding_kind = "external"
+        if not centers:
+            centers, thresholds = cls._learn_action_context_embeddings(
+                sequences,
+                transition_matrix=transition_matrix,
+            )
+            embedding_kind = "transition_context"
 
         return cls.from_task_sequences(
             templates,
@@ -295,6 +343,13 @@ class PapbValidator:
             noncritical_actions=noncritical_actions or set(),
             embedding_centers=centers,
             embedding_thresholds=thresholds,
+            embedding_kind=embedding_kind,
+            transition_matrix=transition_matrix,
+            context_transitions=context_transitions,
+            context_support=context_support,
+            context_max_order=context_max_order,
+            forbidden_transitions=forbidden_transitions,
+            transition_risk_threshold=transition_risk_threshold,
             max_edit_distance=max_edit_distance,
             max_error_ratio=max_error_ratio,
             end_action=end_action,
@@ -310,6 +365,12 @@ class PapbValidator:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         normalized = _normalize_papb_dataset(data, path)
         records = normalized["training_sequences"] or normalized["normal_templates"]
+        kwargs.setdefault("forbidden_transitions", normalized["forbidden_transitions"])
+        kwargs.setdefault(
+            "transition_risk_threshold",
+            float(normalized["transition_risk_threshold"]),
+        )
+        kwargs.setdefault("context_max_order", int(normalized["context_max_order"]))
         return cls.fit_from_records(records, **kwargs)
 
     def predict_valid_next_actions(self, executed_sequence, start_actions=None):
@@ -380,32 +441,175 @@ class PapbValidator:
         )
 
     def validate_next_action(self, executed_sequence, action, start_actions=None) -> dict[str, object]:
+        prediction = self.predict_next_actions(
+            executed_sequence,
+            actual_action=action,
+            top_k=8,
+        )
         state = self.predict_next_state(executed_sequence, start_actions=start_actions)
-        action = str(action).strip()
-        valid_next = set(state.valid_next)
-        is_valid = action in valid_next
-
-        if state.state == "START":
-            reason = "valid start action" if is_valid else "action is not an allowed start action"
-        elif state.terminal and action != self.end_action:
-            reason = "sequence already reached a terminal action"
-        elif not valid_next:
-            reason = "no legal successor is defined for the matched path"
-        elif is_valid:
-            reason = "valid next action"
-        else:
-            reason = f"illegal transition after '{state.matched_path[-1]}'"
-
+        actual = prediction.get("actual") or {}
         return {
-            "is_valid": is_valid,
-            "action": action,
-            "expected_next": sorted(valid_next),
+            "is_valid": actual.get("decision") != "ANOMALY",
+            "action": str(action).strip(),
+            "decision": actual.get("decision", "ANOMALY"),
+            "probability": actual.get("probability", 0.0),
+            "risk": actual.get("risk", 1.0),
+            "expected_next": [item["action"] for item in prediction["candidates"]],
+            "candidates": prediction["candidates"],
+            "context": prediction["context"],
             "matched_path": state.matched_path,
             "matched_indices": state.matched_indices,
             "match_length": state.match_length,
             "terminal": state.terminal,
             "state": state.state,
-            "reason": reason,
+            "reason": actual.get("reason", prediction["reason"]),
+        }
+
+    def predict_next_actions(
+        self,
+        executed_sequence: Iterable[str],
+        *,
+        actual_action: str | None = None,
+        top_k: int = 5,
+    ) -> dict[str, object]:
+        """Predict the next action using longest-context probabilities with backoff."""
+        history = self._clean_sequence(executed_sequence)
+        top_k = max(1, min(int(top_k), 20))
+        context_key = ""
+        probabilities: dict[str, float] = {}
+        support = 0
+
+        max_order = min(self.context_max_order, len(history))
+        for order in range(max_order, 0, -1):
+            key = self._context_key(history[-order:])
+            row = self.context_transitions.get(key, {})
+            if row:
+                context_key = key
+                probabilities = dict(row)
+                support = int(self.context_support.get(key, 0))
+                break
+
+        if not probabilities and history:
+            context_key = history[-1]
+            probabilities = dict(self.transition_matrix.get(history[-1], {}))
+        elif not probabilities and not history:
+            starts = Counter(template[0] for template in self.task_sequences if template)
+            total = sum(starts.values())
+            probabilities = {
+                action: count / total
+                for action, count in starts.items()
+            } if total else {}
+            context_key = "<START>"
+            support = total
+
+        max_probability = max(
+            (float(value) for value in probabilities.values()),
+            default=0.0,
+        )
+        max_action_probability = max(
+            (
+                float(value)
+                for action, value in probabilities.items()
+                if action != self.end_action
+            ),
+            default=max_probability,
+        )
+        candidates = []
+        for action, probability in sorted(
+            probabilities.items(),
+            key=lambda item: (-float(item[1]), item[0]),
+        )[:top_k]:
+            probability = float(probability)
+            comparison_max = (
+                max_probability
+                if action == self.end_action
+                else max_action_probability
+            )
+            candidates.append(
+                {
+                    "action": action,
+                    "probability": round(probability, 4),
+                    "risk": round(
+                        1.0 - probability / comparison_max,
+                        4,
+                    ) if comparison_max else 1.0,
+                    "support": support,
+                }
+            )
+
+        actual_result = None
+        if actual_action is not None:
+            actual = str(actual_action).strip()
+            probability = float(probabilities.get(actual, 0.0))
+            actual_comparison_max = (
+                max_probability
+                if actual == self.end_action
+                else max_action_probability
+            )
+            previous = history[-1] if history else None
+            forbidden = self.forbidden_transitions.get((previous, actual)) if previous else None
+            embedding_similarity = self._expected_embedding_similarity(
+                actual,
+                [item["action"] for item in candidates],
+            )
+
+            if forbidden:
+                decision = "ANOMALY"
+                reason = (
+                    f"forbidden transition '{previous} -> {actual}' "
+                    f"({forbidden['rule']})"
+                )
+            elif probability >= self.transition_risk_threshold:
+                decision = "NORMAL"
+                reason = (
+                    f"action '{actual}' matches context '{context_key}' "
+                    f"with probability {probability:.3f}"
+                )
+            elif probability > 0:
+                decision = "DEVIATION"
+                reason = (
+                    f"action '{actual}' was observed after context '{context_key}', "
+                    f"but probability {probability:.3f} is below "
+                    f"{self.transition_risk_threshold:.3f}"
+                )
+            elif embedding_similarity >= 0.82:
+                decision = "DEVIATION"
+                reason = (
+                    f"transition was not observed, but '{actual}' has a similar learned "
+                    f"context role (similarity {embedding_similarity:.3f})"
+                )
+            else:
+                decision = "ANOMALY"
+                reason = (
+                    f"action '{actual}' was never observed after context '{context_key}'"
+                )
+
+            actual_result = {
+                "action": actual,
+                "decision": decision,
+                "probability": round(probability, 4),
+                "risk": round(
+                    1.0 - probability / actual_comparison_max,
+                    4,
+                ) if actual_comparison_max else 1.0,
+                "embedding_similarity": round(embedding_similarity, 4),
+                "forbidden": bool(forbidden),
+                "reason": reason,
+            }
+
+        return {
+            "history": history,
+            "context": context_key,
+            "context_order": 0 if context_key == "<START>" else len(context_key.split("|")),
+            "support": support,
+            "threshold": self.transition_risk_threshold,
+            "candidates": candidates,
+            "actual": actual_result,
+            "reason": (
+                f"using learned context '{context_key}'"
+                if probabilities
+                else "no learned continuation for this history"
+            ),
         }
 
     def validate_sequence(self, sequence: Iterable[object], *, require_terminal: bool | None = None) -> dict[str, object]:
@@ -552,6 +756,7 @@ class PapbValidator:
         template_match: dict[str, object] | None = None,
         candidate_matches: list[dict[str, object]] | None = None,
         transition_check: dict[str, object] | None = None,
+        next_action_prediction: dict[str, object] | None = None,
     ) -> dict[str, object]:
         transition_count = max(0, action_count - 1)
         result = {
@@ -571,6 +776,8 @@ class PapbValidator:
             result["candidate_matches"] = candidate_matches
         if transition_check is not None:
             result["transition_check"] = transition_check
+        if next_action_prediction is not None:
+            result["next_action_prediction"] = next_action_prediction
         return result
 
     def _longest_valid_path(
@@ -648,6 +855,38 @@ class PapbValidator:
     @staticmethod
     def _clean_sequence(sequence: Iterable[str]) -> list[str]:
         return [str(action).strip() for action in sequence if str(action).strip()]
+
+    @staticmethod
+    def _context_key(actions: Iterable[str]) -> str:
+        return "|".join(str(action).strip() for action in actions if str(action).strip())
+
+    @staticmethod
+    def _cosine_similarity(left: object, right: object) -> float:
+        left_values = [float(value) for value in left]
+        right_values = [float(value) for value in right]
+        if len(left_values) != len(right_values) or not left_values:
+            return 0.0
+        dot = sum(a * b for a, b in zip(left_values, right_values))
+        left_norm = sum(value * value for value in left_values) ** 0.5
+        right_norm = sum(value * value for value in right_values) ** 0.5
+        if left_norm <= 1e-12 or right_norm <= 1e-12:
+            return 0.0
+        return max(0.0, min(1.0, dot / (left_norm * right_norm)))
+
+    def _expected_embedding_similarity(
+        self,
+        actual: str,
+        expected_actions: Iterable[str],
+    ) -> float:
+        actual_vector = self.embedding_centers.get(f"context:{actual}")
+        if actual_vector is None:
+            return 0.0
+        similarities = []
+        for expected in expected_actions:
+            expected_vector = self.embedding_centers.get(f"context:{expected}")
+            if expected_vector is not None:
+                similarities.append(self._cosine_similarity(actual_vector, expected_vector))
+        return max(similarities, default=0.0)
 
     @staticmethod
     def _normalize_action_items(sequence: Iterable[object]) -> list[dict[str, object]]:
@@ -736,6 +975,13 @@ class PapbValidator:
             violation
             for violation in best["violations"]
             if violation.get("expected") == [self.end_action]
+            or (
+                violation.get("index") == 0
+                and any(
+                    expected in self.start_actions
+                    for expected in violation.get("expected", [])
+                )
+            )
             or any(expected in self.critical_actions for expected in violation.get("expected", []))
         ]
         soft_violations = [
@@ -822,11 +1068,16 @@ class PapbValidator:
                 }
             ]
 
-        expected_next = []
-        if best["matched_prefix_length"] < len(best["template"]):
-            expected_next = [best["template"][best["matched_prefix_length"]]]
-        else:
-            expected_next = [self.end_action]
+        next_action_prediction = self.predict_next_actions(actions, top_k=5)
+        expected_next = [
+            item["action"]
+            for item in next_action_prediction["candidates"]
+        ]
+        if not expected_next:
+            if best["matched_prefix_length"] < len(best["template"]):
+                expected_next = [best["template"][best["matched_prefix_length"]]]
+            else:
+                expected_next = [self.end_action]
 
         return self._decision(
             valid=valid,
@@ -853,6 +1104,7 @@ class PapbValidator:
                 for item in ranked_matches[:3]
             ],
             transition_check=transition_result,
+            next_action_prediction=next_action_prediction,
         )
 
     def _align_to_template(
@@ -1080,11 +1332,27 @@ class PapbValidator:
             has_row = bool(row)
             seen = actual in row
             prob = float(row.get(actual, 0.0))
-            risk = round(1.0 - prob, 4)
+            context_prediction = self.predict_next_actions(
+                actions[:idx],
+                actual_action=actual,
+                top_k=5,
+            )
+            actual_prediction = context_prediction.get("actual") or {}
+            context_prob = float(actual_prediction.get("probability", 0.0))
+            risk = float(
+                actual_prediction.get(
+                    "risk",
+                    round(1.0 - prob, 4),
+                )
+            )
             forbidden = self.forbidden_transitions.get((previous, actual))
 
             if forbidden:
                 level = "forbidden"
+            elif actual_prediction.get("decision") == "ANOMALY":
+                level = "unseen"
+            elif actual_prediction.get("decision") == "DEVIATION":
+                level = "low"
             elif not has_row:
                 level = "unknown"  # no statistics learned for the source action
             elif not seen:
@@ -1101,6 +1369,9 @@ class PapbValidator:
                 "previous": previous,
                 "actual": actual,
                 "probability": round(prob, 4),
+                "context_probability": round(context_prob, 4),
+                "context": context_prediction.get("context", ""),
+                "decision": actual_prediction.get("decision", "UNKNOWN"),
                 "risk": risk,
                 "level": level,
             }
@@ -1137,6 +1408,15 @@ class PapbValidator:
             "mean_risk": mean_risk,
             "max_risk": max_risk,
             "forbidden_count": len(violations),
+            "deviation_count": sum(
+                item.get("decision") == "DEVIATION"
+                for item in transitions
+            ),
+            "unseen_count": sum(
+                item.get("decision") == "ANOMALY"
+                for item in transitions
+                if item.get("level") != "forbidden"
+            ),
         }
 
     def _embedding_match(
@@ -1205,6 +1485,7 @@ class PapbValidator:
 
         return {
             "enabled": bool(self.embedding_centers),
+            "kind": self.embedding_kind,
             "checked": used,
             "mean_normalized_distance": total / max(used, 1),
             "weight": self.embedding_weight,
@@ -1277,7 +1558,11 @@ class PapbValidator:
             "embedding_centers": self.embedding_centers,
             "embedding_thresholds": self.embedding_thresholds,
             "embedding_weight": self.embedding_weight,
+            "embedding_kind": self.embedding_kind,
             "transition_matrix": self.transition_matrix,
+            "context_transitions": self.context_transitions,
+            "context_support": self.context_support,
+            "context_max_order": self.context_max_order,
             "forbidden_transitions": [
                 {"from": src, "to": dst, "rule": meta["rule"], "score": meta["score"]}
                 for (src, dst), meta in self.forbidden_transitions.items()
@@ -1340,6 +1625,92 @@ class PapbValidator:
         if min_support <= 0:
             learned = {action for template in templates for action in template}
         return learned - noncritical_actions
+
+    @staticmethod
+    def _normalize_counts(
+        counts: dict[str, Counter],
+    ) -> dict[str, dict[str, float]]:
+        result: dict[str, dict[str, float]] = {}
+        for source, row in counts.items():
+            total = sum(row.values())
+            if total <= 0:
+                continue
+            result[source] = {
+                target: round(count / total, 6)
+                for target, count in sorted(row.items())
+            }
+        return result
+
+    @classmethod
+    def _learn_transition_matrix(
+        cls,
+        sequences: list[list[str]],
+        *,
+        end_action: str,
+    ) -> dict[str, dict[str, float]]:
+        counts: dict[str, Counter] = defaultdict(Counter)
+        for sequence in sequences:
+            if not sequence:
+                continue
+            for current, following in zip(sequence, sequence[1:]):
+                counts[current][following] += 1
+            counts[sequence[-1]][end_action] += 1
+        return cls._normalize_counts(counts)
+
+    @classmethod
+    def _learn_context_transitions(
+        cls,
+        sequences: list[list[str]],
+        *,
+        max_order: int,
+        end_action: str,
+    ) -> tuple[dict[str, dict[str, float]], dict[str, int]]:
+        counts: dict[str, Counter] = defaultdict(Counter)
+        for sequence in sequences:
+            if not sequence:
+                continue
+            extended = list(sequence) + [end_action]
+            for next_index in range(1, len(extended)):
+                following = extended[next_index]
+                available = min(max_order, next_index)
+                for order in range(1, available + 1):
+                    context = extended[next_index - order:next_index]
+                    counts[cls._context_key(context)][following] += 1
+        support = {
+            context: int(sum(row.values()))
+            for context, row in counts.items()
+        }
+        return cls._normalize_counts(counts), support
+
+    @classmethod
+    def _learn_action_context_embeddings(
+        cls,
+        sequences: list[list[str]],
+        *,
+        transition_matrix: dict[str, dict[str, float]],
+    ) -> tuple[dict[str, list[float]], dict[str, float]]:
+        actions = sorted({action for sequence in sequences for action in sequence})
+        inbound: dict[str, Counter] = defaultdict(Counter)
+        for sequence in sequences:
+            for previous, actual in zip(sequence, sequence[1:]):
+                inbound[actual][previous] += 1
+
+        centers: dict[str, list[float]] = {}
+        thresholds: dict[str, float] = {}
+        for action in actions:
+            incoming_total = sum(inbound[action].values())
+            incoming = [
+                inbound[action][source] / incoming_total if incoming_total else 0.0
+                for source in actions
+            ]
+            outgoing_row = transition_matrix.get(action, {})
+            outgoing = [float(outgoing_row.get(target, 0.0)) for target in actions]
+            centers[f"context:{action}"] = [
+                round(value, 6)
+                for value in incoming + outgoing
+            ]
+            thresholds[f"context:{action}"] = 0.82
+        return centers, thresholds
 
     @classmethod
     def _learn_embedding_stats(
@@ -1454,13 +1825,14 @@ def _map_action_dict_keys(values: dict[object, object], action_map: dict[str, st
 def _extract_sequences_from_data(data: object) -> list[Iterable[object]]:
     raw: list[object]
     if isinstance(data, dict):
-        raw = (
+        primary = (
             data.get("training_sequences")
             or data.get("normal_sequences")
             or data.get("normal_templates")
             or data.get("sequences")
             or []
         )
+        raw = list(primary) + list(data.get("expert_sequences") or [])
     elif isinstance(data, list):
         raw = data
     else:
@@ -1573,7 +1945,14 @@ def _normalize_papb_dataset(data: object, source_path: str | Path | None) -> dic
         "embedding_centers": data.get("embedding_centers", {}),
         "embedding_thresholds": data.get("embedding_thresholds", {}),
         "embedding_weight": data.get("embedding_weight", 0.35),
+        "embedding_kind": data.get("embedding_kind", "external"),
         "transition_matrix": _map_transition_matrix(data.get("transition_matrix", {}), action_map),
+        "context_transitions": _map_transition_matrix(
+            data.get("context_transitions", {}),
+            action_map,
+        ),
+        "context_support": data.get("context_support", {}),
+        "context_max_order": data.get("context_max_order", 3),
         "forbidden_transitions": _map_forbidden_rules(
             data.get("forbidden_transitions", data.get("state_constraint_rules", [])),
             action_map,

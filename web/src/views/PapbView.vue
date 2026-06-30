@@ -27,6 +27,10 @@ const retrainForm = reactive({
   noncritical_actions: 'stand, move',
 })
 const newTrainingText = ref('')
+const predictionHistoryText = ref('stand, twistBody')
+const predictionActualAction = ref('twistJump')
+const predictionLoading = ref(false)
+const predictionResult = ref(null)
 
 const statusMap = {
   NORMAL: { type: 'success', text: '正常', explain: '动作序列完整命中已学习的正常流程模板。' },
@@ -55,6 +59,8 @@ const bestTemplate = computed(() => result.value?.template_match?.template || []
 
 const transitionCheck = computed(() => result.value?.transition_check || { enabled: false, transitions: [] })
 const transitions = computed(() => transitionCheck.value.transitions || [])
+const nextPrediction = computed(() => result.value?.next_action_prediction || null)
+const nextCandidates = computed(() => nextPrediction.value?.candidates || [])
 const transitionLevelMeta = {
   high: { text: '正常', type: 'success' },
   medium: { text: '偏低', type: 'info' },
@@ -242,6 +248,27 @@ const addTrainingSequence = async () => {
   }
 }
 
+const runNextPrediction = async () => {
+  const history = parseActions(predictionHistoryText.value)
+  if (!history.length) {
+    ElMessage.warning('请先输入历史动作序列')
+    return
+  }
+  predictionLoading.value = true
+  try {
+    const { data } = await api.post('/api/papb/predict-next', {
+      history,
+      actual_action: predictionActualAction.value || null,
+      top_k: 8,
+    })
+    predictionResult.value = data
+  } catch (error) {
+    ElMessage.error(errorText(error, '下一动作预测失败'))
+  } finally {
+    predictionLoading.value = false
+  }
+}
+
 const buildLocalReport = () => {
   if (!result.value) return ''
   const lines = [
@@ -350,6 +377,50 @@ onMounted(refreshAll)
     </div>
   </section>
 
+  <section class="panel fade-in">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">实时下一动作预测</h2>
+        <p class="panel-sub">根据已经执行的动作上下文，预测合法候选，并判断实际下一动作是正常、偏移还是异常。</p>
+      </div>
+    </div>
+    <div class="grid-2 mt-18">
+      <label class="control-field">
+        <span>历史动作序列</span>
+        <el-input v-model="predictionHistoryText" placeholder="stand, twistBody" />
+      </label>
+      <label class="control-field">
+        <span>实际下一动作，可选</span>
+        <el-select v-model="predictionActualAction" clearable filterable allow-create>
+          <el-option v-for="action in actionOptions" :key="action" :label="action" :value="action" />
+        </el-select>
+      </label>
+    </div>
+    <div class="action-row mt-14">
+      <el-button type="primary" :loading="predictionLoading" @click="runNextPrediction">预测并判断</el-button>
+      <el-tag
+        v-if="predictionResult?.actual"
+        :type="predictionResult.actual.decision === 'NORMAL' ? 'success' : predictionResult.actual.decision === 'DEVIATION' ? 'warning' : 'danger'"
+        size="large"
+      >
+        {{ predictionResult.actual.decision }}
+      </el-tag>
+      <span v-if="predictionResult?.actual" class="pill-badge">{{ predictionResult.actual.reason }}</span>
+    </div>
+    <div v-if="predictionResult" class="data-table mt-14">
+      <el-table :data="predictionResult.candidates || []" max-height="300" stripe>
+        <el-table-column type="index" label="排名" width="72" />
+        <el-table-column prop="action" label="候选动作" min-width="140" />
+        <el-table-column label="预测概率" min-width="200">
+          <template #default="{ row }">
+            <el-progress :percentage="Math.round(Number(row.probability || 0) * 100)" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="support" label="上下文样本" width="120" />
+      </el-table>
+    </div>
+  </section>
+
   <section v-if="result" class="panel fade-in">
     <div class="section-header">
       <div>
@@ -425,6 +496,12 @@ onMounted(refreshAll)
         <el-table-column label="转移概率" width="120">
           <template #default="{ row }">{{ Number(row.probability || 0).toFixed(2) }}</template>
         </el-table-column>
+        <el-table-column label="上下文概率" width="130">
+          <template #default="{ row }">{{ Number(row.context_probability || 0).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column label="上下文" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.context || '-' }}</template>
+        </el-table-column>
         <el-table-column label="风险" width="110">
           <template #default="{ row }">{{ Number(row.risk || 0).toFixed(2) }}</template>
         </el-table-column>
@@ -437,6 +514,33 @@ onMounted(refreshAll)
         </el-table-column>
         <el-table-column label="命中规则" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">{{ row.rule || '-' }}</template>
+        </el-table-column>
+      </el-table>
+    </div>
+  </section>
+
+  <section v-if="result && nextPrediction" class="panel fade-in">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">下一动作上下文预测</h2>
+        <p class="panel-sub">
+          使用 {{ nextPrediction.context_order || 0 }} 阶上下文
+          “{{ nextPrediction.context || 'START' }}”，支持样本 {{ nextPrediction.support || 0 }} 条。
+        </p>
+      </div>
+      <span class="pill-badge">正常阈值 {{ Number(nextPrediction.threshold || 0).toFixed(2) }}</span>
+    </div>
+    <div class="data-table mt-14">
+      <el-table :data="nextCandidates" max-height="300" stripe empty-text="当前上下文没有已学习的后续动作">
+        <el-table-column type="index" label="排名" width="72" />
+        <el-table-column prop="action" label="候选动作" min-width="140" />
+        <el-table-column label="预测概率" min-width="180">
+          <template #default="{ row }">
+            <el-progress :percentage="Math.round(Number(row.probability || 0) * 100)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="偏移风险" width="120">
+          <template #default="{ row }">{{ Number(row.risk || 0).toFixed(3) }}</template>
         </el-table-column>
       </el-table>
     </div>

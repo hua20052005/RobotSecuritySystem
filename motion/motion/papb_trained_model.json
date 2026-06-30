@@ -27,6 +27,16 @@
     ],
     [
       "stand",
+      "jump",
+      "stand"
+    ],
+    [
+      "stand",
+      "twistBody",
+      "stand"
+    ],
+    [
+      "stand",
       "hello",
       "move",
       "backflip"
@@ -39,6 +49,12 @@
     ],
     [
       "stand",
+      "moonwalk",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
       "move",
       "move",
       "move",
@@ -47,12 +63,9 @@
     ],
     [
       "stand",
-      "jump",
-      "stand"
-    ],
-    [
-      "stand",
-      "twistBody",
+      "move",
+      "backflip",
+      "move",
       "stand"
     ],
     [
@@ -67,24 +80,11 @@
     ],
     [
       "stand",
-      "moonwalk",
-      "hello",
-      "stand"
-    ],
-    [
-      "stand",
       "move",
       "move",
       "move",
       "move",
       "move",
-      "move",
-      "stand"
-    ],
-    [
-      "stand",
-      "move",
-      "backflip",
       "move",
       "stand"
     ],
@@ -196,32 +196,963 @@
       "stand",
       "twistBody",
       "twistJump"
+    ],
+    [
+      "stand",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "hello",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "jump",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "twistBody",
+      "stand"
+    ],
+    [
+      "stand",
+      "hello",
+      "twistBody",
+      "stand"
+    ],
+    [
+      "stand",
+      "hello",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "stand"
+    ],
+    [
+      "stand",
+      "dance1",
+      "stand"
+    ],
+    [
+      "stand",
+      "dance1",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "backflip",
+      "stand"
+    ],
+    [
+      "stand",
+      "moonwalk",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "move",
+      "move",
+      "stand"
+    ],
+    [
+      "stand",
+      "hello",
+      "jump",
+      "stand"
     ]
   ],
   "max_repeats": {
-    "stand": 6,
-    "hello": 4,
-    "move": 7,
-    "backflip": 2,
-    "moonwalk": 2,
-    "jump": 2,
-    "twistBody": 2,
-    "twistJump": 2,
-    "dance1": 2
+    "stand": 5,
+    "hello": 3,
+    "move": 6,
+    "backflip": 1,
+    "moonwalk": 1,
+    "jump": 1,
+    "twistBody": 1,
+    "twistJump": 1,
+    "dance1": 1
   },
   "critical_actions": [],
   "noncritical_actions": [
     "move",
     "stand"
   ],
-  "embedding_centers": {},
-  "embedding_thresholds": {},
+  "embedding_centers": {
+    "context:backflip": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.142857,
+      0.571429,
+      0.285714,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.142857,
+      0.285714,
+      0.142857,
+      0.0,
+      0.0
+    ],
+    "context:dance1": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.75,
+      0.25,
+      0.0,
+      0.0
+    ],
+    "context:hello": [
+      0.0,
+      0.0,
+      0.076923,
+      0.038462,
+      0.269231,
+      0.038462,
+      0.538462,
+      0.0,
+      0.038462,
+      0.0,
+      0.0,
+      0.076923,
+      0.076923,
+      0.0,
+      0.153846,
+      0.423077,
+      0.153846,
+      0.0
+    ],
+    "context:jump": [
+      0.0,
+      0.0,
+      0.2,
+      0.0,
+      0.2,
+      0.2,
+      0.4,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.1,
+      0.0,
+      0.1,
+      0.0,
+      0.8,
+      0.0,
+      0.0
+    ],
+    "context:moonwalk": [
+      0.05,
+      0.0,
+      0.0,
+      0.05,
+      0.0,
+      0.05,
+      0.75,
+      0.1,
+      0.0,
+      0.05,
+      0.0,
+      0.35,
+      0.1,
+      0.0,
+      0.25,
+      0.15,
+      0.05,
+      0.0
+    ],
+    "context:move": [
+      0.045455,
+      0.068182,
+      0.090909,
+      0.0,
+      0.113636,
+      0.363636,
+      0.318182,
+      0.0,
+      0.0,
+      0.090909,
+      0.0,
+      0.022727,
+      0.045455,
+      0.022727,
+      0.363636,
+      0.295455,
+      0.045455,
+      0.022727
+    ],
+    "context:stand": [
+      0.014925,
+      0.014925,
+      0.164179,
+      0.119403,
+      0.044776,
+      0.19403,
+      0.253731,
+      0.119403,
+      0.074627,
+      0.015152,
+      0.030303,
+      0.106061,
+      0.030303,
+      0.113636,
+      0.106061,
+      0.128788,
+      0.090909,
+      0.0
+    ],
+    "context:twistBody": [
+      0.0,
+      0.0,
+      0.210526,
+      0.0,
+      0.052632,
+      0.105263,
+      0.631579,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.105263,
+      0.0,
+      0.421053,
+      0.0,
+      0.368421
+    ],
+    "context:twistJump": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.125,
+      0.0,
+      0.875,
+      0.0,
+      0.0,
+      0.0,
+      0.125,
+      0.0,
+      0.0,
+      0.0,
+      0.625,
+      0.0,
+      0.0
+    ]
+  },
+  "embedding_thresholds": {
+    "context:backflip": 0.82,
+    "context:dance1": 0.82,
+    "context:hello": 0.82,
+    "context:jump": 0.82,
+    "context:moonwalk": 0.82,
+    "context:move": 0.82,
+    "context:stand": 0.82,
+    "context:twistBody": 0.82,
+    "context:twistJump": 0.82
+  },
   "embedding_weight": 0.35,
-  "transition_matrix": {},
-  "forbidden_transitions": [],
-  "transition_risk_threshold": 0.15,
+  "embedding_kind": "transition_context",
+  "transition_matrix": {
+    "stand": {
+      "__END__": 0.378788,
+      "backflip": 0.015152,
+      "dance1": 0.030303,
+      "hello": 0.106061,
+      "jump": 0.030303,
+      "moonwalk": 0.113636,
+      "move": 0.106061,
+      "stand": 0.128788,
+      "twistBody": 0.090909
+    },
+    "hello": {
+      "__END__": 0.115385,
+      "hello": 0.076923,
+      "jump": 0.076923,
+      "move": 0.153846,
+      "stand": 0.423077,
+      "twistBody": 0.153846
+    },
+    "move": {
+      "__END__": 0.090909,
+      "backflip": 0.090909,
+      "hello": 0.022727,
+      "jump": 0.045455,
+      "moonwalk": 0.022727,
+      "move": 0.363636,
+      "stand": 0.295455,
+      "twistBody": 0.045455,
+      "twistJump": 0.022727
+    },
+    "backflip": {
+      "__END__": 0.428571,
+      "moonwalk": 0.142857,
+      "move": 0.285714,
+      "stand": 0.142857
+    },
+    "moonwalk": {
+      "__END__": 0.05,
+      "backflip": 0.05,
+      "hello": 0.35,
+      "jump": 0.1,
+      "move": 0.25,
+      "stand": 0.15,
+      "twistBody": 0.05
+    },
+    "jump": {
+      "hello": 0.1,
+      "moonwalk": 0.1,
+      "stand": 0.8
+    },
+    "twistBody": {
+      "__END__": 0.105263,
+      "moonwalk": 0.105263,
+      "stand": 0.421053,
+      "twistJump": 0.368421
+    },
+    "twistJump": {
+      "__END__": 0.25,
+      "hello": 0.125,
+      "stand": 0.625
+    },
+    "dance1": {
+      "move": 0.75,
+      "stand": 0.25
+    }
+  },
+  "context_transitions": {
+    "stand": {
+      "__END__": 0.378788,
+      "backflip": 0.015152,
+      "dance1": 0.030303,
+      "hello": 0.106061,
+      "jump": 0.030303,
+      "moonwalk": 0.113636,
+      "move": 0.106061,
+      "stand": 0.128788,
+      "twistBody": 0.090909
+    },
+    "hello": {
+      "__END__": 0.115385,
+      "hello": 0.076923,
+      "jump": 0.076923,
+      "move": 0.153846,
+      "stand": 0.423077,
+      "twistBody": 0.153846
+    },
+    "stand|hello": {
+      "hello": 0.071429,
+      "jump": 0.142857,
+      "move": 0.285714,
+      "stand": 0.428571,
+      "twistBody": 0.071429
+    },
+    "move": {
+      "__END__": 0.090909,
+      "backflip": 0.090909,
+      "hello": 0.022727,
+      "jump": 0.045455,
+      "moonwalk": 0.022727,
+      "move": 0.363636,
+      "stand": 0.295455,
+      "twistBody": 0.045455,
+      "twistJump": 0.022727
+    },
+    "hello|move": {
+      "backflip": 0.5,
+      "move": 0.25,
+      "stand": 0.25
+    },
+    "stand|hello|move": {
+      "backflip": 0.5,
+      "move": 0.25,
+      "stand": 0.25
+    },
+    "backflip": {
+      "__END__": 0.428571,
+      "moonwalk": 0.142857,
+      "move": 0.285714,
+      "stand": 0.142857
+    },
+    "move|backflip": {
+      "__END__": 0.5,
+      "move": 0.5
+    },
+    "hello|move|backflip": {
+      "__END__": 1.0
+    },
+    "moonwalk": {
+      "__END__": 0.05,
+      "backflip": 0.05,
+      "hello": 0.35,
+      "jump": 0.1,
+      "move": 0.25,
+      "stand": 0.15,
+      "twistBody": 0.05
+    },
+    "stand|moonwalk": {
+      "backflip": 0.066667,
+      "hello": 0.466667,
+      "jump": 0.133333,
+      "move": 0.2,
+      "stand": 0.066667,
+      "twistBody": 0.066667
+    },
+    "jump": {
+      "hello": 0.1,
+      "moonwalk": 0.1,
+      "stand": 0.8
+    },
+    "moonwalk|jump": {
+      "stand": 1.0
+    },
+    "stand|moonwalk|jump": {
+      "stand": 1.0
+    },
+    "jump|stand": {
+      "__END__": 0.875,
+      "hello": 0.125
+    },
+    "moonwalk|jump|stand": {
+      "__END__": 1.0
+    },
+    "moonwalk|hello": {
+      "__END__": 0.285714,
+      "stand": 0.285714,
+      "twistBody": 0.428571
+    },
+    "stand|moonwalk|hello": {
+      "__END__": 0.285714,
+      "stand": 0.285714,
+      "twistBody": 0.428571
+    },
+    "hello|stand": {
+      "__END__": 1.0
+    },
+    "moonwalk|hello|stand": {
+      "__END__": 1.0
+    },
+    "twistBody": {
+      "__END__": 0.105263,
+      "moonwalk": 0.105263,
+      "stand": 0.421053,
+      "twistJump": 0.368421
+    },
+    "stand|twistBody": {
+      "moonwalk": 0.166667,
+      "stand": 0.25,
+      "twistJump": 0.583333
+    },
+    "twistJump": {
+      "__END__": 0.25,
+      "hello": 0.125,
+      "stand": 0.625
+    },
+    "twistBody|twistJump": {
+      "__END__": 0.285714,
+      "hello": 0.142857,
+      "stand": 0.571429
+    },
+    "stand|twistBody|twistJump": {
+      "__END__": 0.285714,
+      "hello": 0.142857,
+      "stand": 0.571429
+    },
+    "twistJump|stand": {
+      "__END__": 1.0
+    },
+    "twistBody|twistJump|stand": {
+      "__END__": 1.0
+    },
+    "hello|twistBody": {
+      "stand": 1.0
+    },
+    "moonwalk|hello|twistBody": {
+      "stand": 1.0
+    },
+    "twistBody|stand": {
+      "__END__": 1.0
+    },
+    "hello|twistBody|stand": {
+      "__END__": 1.0
+    },
+    "stand|stand": {
+      "__END__": 0.176471,
+      "moonwalk": 0.058824,
+      "move": 0.176471,
+      "stand": 0.529412,
+      "twistBody": 0.058824
+    },
+    "stand|stand|stand": {
+      "__END__": 0.333333,
+      "stand": 0.666667
+    },
+    "stand|move": {
+      "backflip": 0.142857,
+      "hello": 0.071429,
+      "jump": 0.071429,
+      "moonwalk": 0.071429,
+      "move": 0.357143,
+      "stand": 0.214286,
+      "twistBody": 0.071429
+    },
+    "move|move": {
+      "__END__": 0.0625,
+      "move": 0.5625,
+      "stand": 0.3125,
+      "twistBody": 0.0625
+    },
+    "stand|move|move": {
+      "move": 0.8,
+      "stand": 0.2
+    },
+    "move|move|move": {
+      "move": 0.555556,
+      "stand": 0.444444
+    },
+    "move|stand": {
+      "__END__": 0.846154,
+      "stand": 0.153846
+    },
+    "move|move|stand": {
+      "__END__": 1.0
+    },
+    "stand|move|backflip": {
+      "move": 1.0
+    },
+    "backflip|move": {
+      "stand": 1.0
+    },
+    "move|backflip|move": {
+      "stand": 1.0
+    },
+    "backflip|move|stand": {
+      "__END__": 1.0
+    },
+    "stand|backflip": {
+      "moonwalk": 0.5,
+      "stand": 0.5
+    },
+    "backflip|moonwalk": {
+      "move": 1.0
+    },
+    "stand|backflip|moonwalk": {
+      "move": 1.0
+    },
+    "moonwalk|move": {
+      "__END__": 0.2,
+      "jump": 0.2,
+      "move": 0.2,
+      "stand": 0.2,
+      "twistJump": 0.2
+    },
+    "backflip|moonwalk|move": {
+      "twistJump": 1.0
+    },
+    "move|twistJump": {
+      "stand": 1.0
+    },
+    "moonwalk|move|twistJump": {
+      "stand": 1.0
+    },
+    "move|twistJump|stand": {
+      "__END__": 1.0
+    },
+    "hello|hello": {
+      "hello": 0.5,
+      "stand": 0.5
+    },
+    "stand|hello|hello": {
+      "hello": 1.0
+    },
+    "hello|hello|hello": {
+      "stand": 1.0
+    },
+    "hello|hello|stand": {
+      "__END__": 1.0
+    },
+    "stand|move|stand": {
+      "__END__": 0.333333,
+      "stand": 0.666667
+    },
+    "move|stand|stand": {
+      "move": 1.0
+    },
+    "stand|stand|move": {
+      "moonwalk": 0.333333,
+      "move": 0.333333,
+      "stand": 0.333333
+    },
+    "moonwalk|twistBody": {
+      "__END__": 1.0
+    },
+    "stand|moonwalk|twistBody": {
+      "__END__": 1.0
+    },
+    "hello|jump": {
+      "moonwalk": 0.5,
+      "stand": 0.5
+    },
+    "stand|hello|jump": {
+      "moonwalk": 0.5,
+      "stand": 0.5
+    },
+    "jump|moonwalk": {
+      "stand": 1.0
+    },
+    "hello|jump|moonwalk": {
+      "stand": 1.0
+    },
+    "moonwalk|stand": {
+      "__END__": 1.0
+    },
+    "jump|moonwalk|stand": {
+      "__END__": 1.0
+    },
+    "twistJump|hello": {
+      "stand": 1.0
+    },
+    "twistBody|twistJump|hello": {
+      "stand": 1.0
+    },
+    "twistJump|hello|stand": {
+      "__END__": 1.0
+    },
+    "move|moonwalk": {
+      "move": 1.0
+    },
+    "stand|move|moonwalk": {
+      "move": 1.0
+    },
+    "move|moonwalk|move": {
+      "jump": 1.0
+    },
+    "move|jump": {
+      "hello": 0.5,
+      "stand": 0.5
+    },
+    "moonwalk|move|jump": {
+      "hello": 1.0
+    },
+    "jump|hello": {
+      "__END__": 1.0
+    },
+    "move|jump|hello": {
+      "__END__": 1.0
+    },
+    "stand|stand|moonwalk": {
+      "move": 1.0
+    },
+    "stand|moonwalk|move": {
+      "__END__": 0.333333,
+      "move": 0.333333,
+      "stand": 0.333333
+    },
+    "twistBody|moonwalk": {
+      "__END__": 0.5,
+      "stand": 0.5
+    },
+    "stand|twistBody|moonwalk": {
+      "__END__": 0.5,
+      "stand": 0.5
+    },
+    "moonwalk|backflip": {
+      "__END__": 1.0
+    },
+    "stand|moonwalk|backflip": {
+      "__END__": 1.0
+    },
+    "twistBody|moonwalk|stand": {
+      "__END__": 1.0
+    },
+    "moonwalk|move|move": {
+      "twistBody": 1.0
+    },
+    "move|twistBody": {
+      "__END__": 0.5,
+      "stand": 0.5
+    },
+    "move|move|twistBody": {
+      "__END__": 1.0
+    },
+    "hello|move|move": {
+      "__END__": 1.0
+    },
+    "stand|jump": {
+      "stand": 1.0
+    },
+    "stand|jump|stand": {
+      "__END__": 0.75,
+      "hello": 0.25
+    },
+    "jump|stand|hello": {
+      "stand": 1.0
+    },
+    "stand|hello|stand": {
+      "__END__": 1.0
+    },
+    "stand|twistBody|stand": {
+      "__END__": 1.0
+    },
+    "stand|stand|twistBody": {
+      "twistJump": 1.0
+    },
+    "dance1": {
+      "move": 0.75,
+      "stand": 0.25
+    },
+    "stand|dance1": {
+      "move": 0.75,
+      "stand": 0.25
+    },
+    "dance1|move": {
+      "__END__": 0.666667,
+      "stand": 0.333333
+    },
+    "stand|dance1|move": {
+      "__END__": 0.666667,
+      "stand": 0.333333
+    },
+    "move|hello": {
+      "stand": 1.0
+    },
+    "stand|move|hello": {
+      "stand": 1.0
+    },
+    "move|hello|stand": {
+      "__END__": 1.0
+    },
+    "stand|move|jump": {
+      "stand": 1.0
+    },
+    "move|jump|stand": {
+      "__END__": 1.0
+    },
+    "stand|move|twistBody": {
+      "stand": 1.0
+    },
+    "move|twistBody|stand": {
+      "__END__": 1.0
+    },
+    "stand|hello|twistBody": {
+      "stand": 1.0
+    },
+    "hello|move|stand": {
+      "__END__": 1.0
+    },
+    "stand|moonwalk|stand": {
+      "__END__": 1.0
+    },
+    "dance1|stand": {
+      "__END__": 1.0
+    },
+    "stand|dance1|stand": {
+      "__END__": 1.0
+    },
+    "dance1|move|stand": {
+      "__END__": 1.0
+    },
+    "backflip|stand": {
+      "__END__": 1.0
+    },
+    "stand|backflip|stand": {
+      "__END__": 1.0
+    },
+    "moonwalk|move|stand": {
+      "__END__": 1.0
+    },
+    "hello|jump|stand": {
+      "__END__": 1.0
+    }
+  },
+  "context_support": {
+    "stand": 132,
+    "hello": 26,
+    "stand|hello": 14,
+    "move": 44,
+    "hello|move": 4,
+    "stand|hello|move": 4,
+    "backflip": 7,
+    "move|backflip": 4,
+    "hello|move|backflip": 2,
+    "moonwalk": 20,
+    "stand|moonwalk": 15,
+    "jump": 10,
+    "moonwalk|jump": 2,
+    "stand|moonwalk|jump": 2,
+    "jump|stand": 8,
+    "moonwalk|jump|stand": 2,
+    "moonwalk|hello": 7,
+    "stand|moonwalk|hello": 7,
+    "hello|stand": 11,
+    "moonwalk|hello|stand": 2,
+    "twistBody": 19,
+    "stand|twistBody": 12,
+    "twistJump": 8,
+    "twistBody|twistJump": 7,
+    "stand|twistBody|twistJump": 7,
+    "twistJump|stand": 5,
+    "twistBody|twistJump|stand": 4,
+    "hello|twistBody": 4,
+    "moonwalk|hello|twistBody": 3,
+    "twistBody|stand": 8,
+    "hello|twistBody|stand": 4,
+    "stand|stand": 17,
+    "stand|stand|stand": 9,
+    "stand|move": 14,
+    "move|move": 16,
+    "stand|move|move": 5,
+    "move|move|move": 9,
+    "move|stand": 13,
+    "move|move|stand": 5,
+    "stand|move|backflip": 2,
+    "backflip|move": 2,
+    "move|backflip|move": 2,
+    "backflip|move|stand": 2,
+    "stand|backflip": 2,
+    "backflip|moonwalk": 1,
+    "stand|backflip|moonwalk": 1,
+    "moonwalk|move": 5,
+    "backflip|moonwalk|move": 1,
+    "move|twistJump": 1,
+    "moonwalk|move|twistJump": 1,
+    "move|twistJump|stand": 1,
+    "hello|hello": 2,
+    "stand|hello|hello": 1,
+    "hello|hello|hello": 1,
+    "hello|hello|stand": 1,
+    "stand|move|stand": 3,
+    "move|stand|stand": 2,
+    "stand|stand|move": 3,
+    "moonwalk|twistBody": 1,
+    "stand|moonwalk|twistBody": 1,
+    "hello|jump": 2,
+    "stand|hello|jump": 2,
+    "jump|moonwalk": 1,
+    "hello|jump|moonwalk": 1,
+    "moonwalk|stand": 3,
+    "jump|moonwalk|stand": 1,
+    "twistJump|hello": 1,
+    "twistBody|twistJump|hello": 1,
+    "twistJump|hello|stand": 1,
+    "move|moonwalk": 1,
+    "stand|move|moonwalk": 1,
+    "move|moonwalk|move": 1,
+    "move|jump": 2,
+    "moonwalk|move|jump": 1,
+    "jump|hello": 1,
+    "move|jump|hello": 1,
+    "stand|stand|moonwalk": 1,
+    "stand|moonwalk|move": 3,
+    "twistBody|moonwalk": 2,
+    "stand|twistBody|moonwalk": 2,
+    "moonwalk|backflip": 1,
+    "stand|moonwalk|backflip": 1,
+    "twistBody|moonwalk|stand": 1,
+    "moonwalk|move|move": 1,
+    "move|twistBody": 2,
+    "move|move|twistBody": 1,
+    "hello|move|move": 1,
+    "stand|jump": 4,
+    "stand|jump|stand": 4,
+    "jump|stand|hello": 1,
+    "stand|hello|stand": 6,
+    "stand|twistBody|stand": 3,
+    "stand|stand|twistBody": 1,
+    "dance1": 4,
+    "stand|dance1": 4,
+    "dance1|move": 3,
+    "stand|dance1|move": 3,
+    "move|hello": 1,
+    "stand|move|hello": 1,
+    "move|hello|stand": 1,
+    "stand|move|jump": 1,
+    "move|jump|stand": 1,
+    "stand|move|twistBody": 1,
+    "move|twistBody|stand": 1,
+    "stand|hello|twistBody": 1,
+    "hello|move|stand": 1,
+    "stand|moonwalk|stand": 1,
+    "dance1|stand": 1,
+    "stand|dance1|stand": 1,
+    "dance1|move|stand": 1,
+    "backflip|stand": 1,
+    "stand|backflip|stand": 1,
+    "moonwalk|move|stand": 1,
+    "hello|jump|stand": 1
+  },
+  "context_max_order": 3,
+  "forbidden_transitions": [
+    {
+      "from": "backflip",
+      "to": "backflip",
+      "rule": "后空翻后必须恢复姿态，禁止连续后空翻",
+      "score": 0.99
+    },
+    {
+      "from": "twistJump",
+      "to": "twistJump",
+      "rule": "扭身跳后必须恢复姿态，禁止连续扭身跳",
+      "score": 0.98
+    },
+    {
+      "from": "backflip",
+      "to": "twistJump",
+      "rule": "高冲击后空翻后不能直接衔接扭身跳",
+      "score": 0.96
+    },
+    {
+      "from": "twistJump",
+      "to": "backflip",
+      "rule": "扭身跳落地后不能直接衔接后空翻",
+      "score": 0.96
+    },
+    {
+      "from": "jump",
+      "to": "backflip",
+      "rule": "普通跳跃后应先恢复姿态再执行后空翻",
+      "score": 0.94
+    },
+    {
+      "from": "dance1",
+      "to": "backflip",
+      "rule": "舞蹈动作结束后应先恢复再执行后空翻",
+      "score": 0.93
+    }
+  ],
+  "transition_risk_threshold": 0.08,
   "max_edit_distance": 1,
   "max_error_ratio": 0.25,
   "end_action": "__END__",
-  "require_terminal": false
+  "require_terminal": true
 }

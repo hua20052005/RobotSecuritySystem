@@ -35,6 +35,7 @@ router = APIRouter(prefix="/api/motion-recognition", tags=["motion-recognition"]
 
 _MODEL_CACHE = None
 _PAPB_CACHE = None
+_PAPB_CACHE_MTIME = None
 
 
 def _load_recognition_model():
@@ -47,13 +48,15 @@ def _load_recognition_model():
 
 
 def _load_papb_validator() -> PapbValidator | None:
-    global _PAPB_CACHE
-    if _PAPB_CACHE is not None:
-        return _PAPB_CACHE
+    global _PAPB_CACHE, _PAPB_CACHE_MTIME
     source = PAPB_MODEL if PAPB_MODEL.exists() else PAPB_DATASET
     if not source.exists():
         return None
+    source_mtime = source.stat().st_mtime_ns
+    if _PAPB_CACHE is not None and _PAPB_CACHE_MTIME == source_mtime:
+        return _PAPB_CACHE
     _PAPB_CACHE = PapbValidator.from_json(source, require_terminal=False)
+    _PAPB_CACHE_MTIME = source_mtime
     return _PAPB_CACHE
 
 
