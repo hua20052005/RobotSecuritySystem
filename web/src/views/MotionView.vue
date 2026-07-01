@@ -37,7 +37,9 @@ const liveBusy = ref(false)
 const liveHost = ref('192.168.2.1')
 const liveUsername = ref('ysc')
 const liveInterface = ref('p2p0')
+const liveSshPassword = ref('')
 const liveSudoPassword = ref('')
+const liveSamePassword = ref(true)
 const liveCaptureSeconds = ref(8)
 let livePollTimer = null
 
@@ -61,7 +63,8 @@ const violations = computed(() => flow.value?.violations || [])
 const transitions = computed(() => flow.value?.transition_check?.transitions || [])
 const candidates = computed(() => flow.value?.candidate_matches || [])
 const selectedFileName = computed(() => selectedFile.value?.name || '')
-const liveRunning = computed(() => Boolean(liveStatus.value?.running))
+const liveOwnsSession = computed(() => liveStatus.value?.config?.module === 'motion')
+const liveRunning = computed(() => Boolean(liveStatus.value?.running && liveOwnsSession.value))
 const segments = computed(() =>
   (result.value?.recognition?.actions || []).map((row, index) => {
     const start = Number(row.t_start_s ?? row.start_s ?? row.time_s ?? 0)
@@ -255,7 +258,12 @@ const pollLiveStatus = async () => {
   try {
     const { data } = await api.get('/api/motion-recognition/live/status', { timeout: 10000 })
     liveStatus.value = data
-    if (data.latest_result && data.latest_result.run_id !== result.value?.run_id) {
+    if (
+      inputMode.value === 'live'
+      && data.config?.module === 'motion'
+      && data.latest_result
+      && data.latest_result.run_id !== result.value?.run_id
+    ) {
       result.value = data.latest_result
       activeTab.value = 'overview'
     }
@@ -278,12 +286,14 @@ const startLiveMonitoring = async () => {
       host: liveHost.value,
       username: liveUsername.value,
       interface: liveInterface.value,
-      sudo_password: liveSudoPassword.value,
+      ssh_password: liveSshPassword.value,
+      sudo_password: liveSamePassword.value ? liveSshPassword.value : liveSudoPassword.value,
       capture_seconds: Number(liveCaptureSeconds.value),
       scenario: scenario.value,
       method: 'command',
     }, { timeout: 15000 })
     liveStatus.value = data
+    liveSshPassword.value = ''
     liveSudoPassword.value = ''
     ElMessage.success('实时监测已启动')
   } catch (error) {
@@ -494,6 +504,21 @@ const exportJson = () => {
             <el-input v-model="liveInterface" :disabled="liveRunning" />
           </label>
           <label class="control-field">
+            <span>SSH 登录密码</span>
+            <el-input
+              v-model="liveSshPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              :disabled="liveRunning"
+              placeholder="用于登录机器狗"
+            />
+          </label>
+          <label class="control-field password-option">
+            <span>权限认证</span>
+            <el-checkbox v-model="liveSamePassword" :disabled="liveRunning">sudo 与 SSH 使用相同密码</el-checkbox>
+          </label>
+          <label v-if="!liveSamePassword" class="control-field">
             <span>sudo 密码</span>
             <el-input
               v-model="liveSudoPassword"
@@ -501,7 +526,7 @@ const exportJson = () => {
               show-password
               autocomplete="new-password"
               :disabled="liveRunning"
-              placeholder="仅在启动时使用"
+              placeholder="用于启动 tcpdump"
             />
           </label>
           <label class="control-field">

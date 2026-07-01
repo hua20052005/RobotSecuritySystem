@@ -88,6 +88,31 @@ def _run_isolated(operation: str, model_key: str, input_path: Path, max_packets:
         raise RuntimeError("ET-BERT worker did not produce a result file")
     return json.loads(output_path.read_text(encoding="utf-8"))
 
+
+def detect_path(input_path: Path, model_key: str, max_packets: int):
+    if model_key not in MODEL_DEFS:
+        raise ValueError(f"unsupported ET-BERT model: {model_key}")
+    weight_path = PROJECT_ROOT / "ET-BERT-main" / "models" / f"{model_key}_finetune.bin"
+    if not weight_path.exists():
+        from backend.payload_fallback import detect_with_ensemble
+
+        return detect_with_ensemble(input_path, max_packets)
+    run_id = uuid.uuid4().hex[:10]
+    result = _run_isolated("detect", model_key, input_path, max_packets)
+    low_conf = [row for row in result["predictions"] if row["confidence"] < 50]
+    return {
+        "run_id": run_id,
+        "model": model_key,
+        "model_type": MODEL_DEFS[model_key]["type"],
+        "total_samples": result["total_samples"],
+        "summary": result["summary"],
+        "abnormal_ratio": result["abnormal_ratio"],
+        "low_confidence_count": len(low_conf),
+        "low_confidence_samples": low_conf[:10],
+        "proto_stats": result["proto_stats"],
+        "predictions": result["predictions"][:100],
+    }
+
 app = FastAPI(title="ET-BERT Detection API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -182,26 +207,10 @@ async def _run_detect(file: UploadFile, model_key: str, max_packets: int):
     input_path.write_bytes(await file.read())
 
     try:
-        result = _run_isolated("detect", model_key, input_path, max_packets)
+        return detect_path(input_path, model_key, max_packets)
     except Exception as exc:
         logger.exception("ET-BERT detect failed")
         raise HTTPException(500, f"检测失败: {exc}")
-
-    # 低置信度告警
-    low_conf = [r for r in result["predictions"] if r["confidence"] < 50]
-
-    return {
-        "run_id": run_id,
-        "model": model_key,
-        "model_type": MODEL_DEFS[model_key]["type"],
-        "total_samples": result["total_samples"],
-        "summary": result["summary"],
-        "abnormal_ratio": result["abnormal_ratio"],
-        "low_confidence_count": len(low_conf),
-        "low_confidence_samples": low_conf[:10],
-        "proto_stats": result["proto_stats"],
-        "predictions": result["predictions"][:100],
-    }
 
 
 def preload_models():

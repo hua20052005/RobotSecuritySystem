@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
 import JsonViewer from '../components/JsonViewer.vue'
+import LiveCapturePanel from '../components/LiveCapturePanel.vue'
 import MetricCard from '../components/MetricCard.vue'
 import ModuleHero from '../components/ModuleHero.vue'
 import ResultSummary from '../components/ResultSummary.vue'
@@ -23,6 +24,19 @@ const activeTab = ref('overview')
 const errorMessage = ref('')
 const elapsedMs = ref(0)
 const resultRef = ref(null)
+const inputMode = ref('file')
+const liveExtraConfig = computed(() => ({
+  model_mode: modelMode.value,
+  max_packets: Number(maxPackets.value),
+}))
+
+const handleLiveResult = async (data) => {
+  result.value = data
+  elapsedMs.value = 0
+  activeTab.value = 'overview'
+  await nextTick()
+  renderAll()
+}
 
 // ── 图表 refs ─────
 const pieRef = ref(null)
@@ -300,7 +314,14 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
     class="fade-in"
     v-loading="loading"
   >
-    <div class="analysis-input-grid payload-config">
+    <div class="input-mode-switch">
+      <el-radio-group v-model="inputMode">
+        <el-radio-button value="file">文件分析</el-radio-button>
+        <el-radio-button value="live">实时监测</el-radio-button>
+      </el-radio-group>
+    </div>
+
+    <div v-if="inputMode === 'file'" class="analysis-input-grid payload-config">
       <UploadPanel
         :file-list="fileList"
         :selected-file="selectedFile"
@@ -333,6 +354,29 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
           <el-button v-if="errorMessage" size="large" :disabled="!selectedFile" @click="runDetection">重试</el-button>
         </div>
       </div>
+    </div>
+
+    <div v-else class="live-analysis-stack">
+      <div class="live-module-options payload-live-options">
+        <label class="control-field">
+          <span>检测粒度</span>
+          <el-radio-group v-model="modelMode" @change="onModelSwitch">
+            <el-radio-button value="packet">包级（单包）</el-radio-button>
+            <el-radio-button value="flow">流级（32 包窗口）</el-radio-button>
+          </el-radio-group>
+        </label>
+        <label class="control-field">
+          <span>每窗口最大处理包数</span>
+          <el-input-number v-model="maxPackets" :min="100" :step="500" :max="50000" />
+        </label>
+      </div>
+      <LiveCapturePanel
+        endpoint="/api/etbert/live"
+        expected-module="payload"
+        :extra-config="liveExtraConfig"
+        :default-window="12"
+        @result="handleLiveResult"
+      />
     </div>
   </SectionBlock>
 

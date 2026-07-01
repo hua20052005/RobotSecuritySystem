@@ -16,8 +16,13 @@ from backend.auth import optional_user
 from backend.ai_report import router as ai_report_router
 from backend.auth_api import router as auth_router
 from backend.db import create_task, init_db
+from backend.defense_api import router as defense_router
 from backend.motion_api import router as motion_router
-from backend.live_motion_api import router as live_motion_router
+from backend.live_motion_api import (
+    payload_router as live_payload_router,
+    router as live_motion_router,
+    side_router as live_side_router,
+)
 from backend.motion_recognition_api import router as motion_recognition_router
 from backend.papb_api import router as papb_router
 from backend.side_channel_api import router as side_channel_router
@@ -62,6 +67,9 @@ app.include_router(ai_report_router)
 app.include_router(motion_router)
 app.include_router(motion_recognition_router)
 app.include_router(live_motion_router)
+app.include_router(live_side_router)
+app.include_router(live_payload_router)
+app.include_router(defense_router)
 app.include_router(papb_router)
 app.include_router(tasks_router)
 if etbert_app is not None:

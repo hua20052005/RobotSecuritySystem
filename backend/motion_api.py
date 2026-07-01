@@ -7,6 +7,11 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Annotated, Dict, List, Optional
+# from typing import Dict, List, Optional
+# try:
+#     from typing import Annotated
+# except ImportError:
+#     from typing_extensions import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi.responses import FileResponse

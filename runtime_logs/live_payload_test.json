@@ -1,0 +1,25 @@
+{
+  "pcap_path": "C:\\Users\\Mojo0108\\Documents\\New project\\pilot\\stand_01.pcap",
+  "output_csv": "runtime_logs\\live_payload_test.csv",
+  "processed_packets": 100,
+  "total_packets_in_file": 4987,
+  "processing_time_sec": 4.0635,
+  "avg_packet_time_ms": 40.635,
+  "avg_final_score": 0.19011,
+  "avg_confidence": 0.557986,
+  "non_safe_ratio": 0.0,
+  "high_or_critical_ratio": 0.0,
+  "max_score_packet": {
+    "packet_index": 0,
+    "final_score": 0.19011031746334436,
+    "threat_level": "SAFE",
+    "protocol": "unknown"
+  },
+  "threat_level_distribution": {
+    "SAFE": 100
+  },
+  "protocol_distribution": {
+    "unknown": 100
+  },
+  "top_rule_hits": []
+}

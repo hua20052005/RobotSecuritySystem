@@ -6,6 +6,7 @@ import {
   Connection,
   DataAnalysis,
   Lock,
+  SetUp,
 } from '@element-plus/icons-vue'
 
 import robotDogHero from '../assets/robot-dog-hero.png'
@@ -43,6 +44,16 @@ const modules = [
     index: '03',
     input: '控制链路 PCAP',
     output: '动作时间线与流程结论',
+  },
+  {
+    title: '系统集成防御',
+    description: '远程编排检测桥接与 UDP 防御代理，验证放行和拦截。',
+    route: '/defense',
+    icon: SetUp,
+    tone: 'amber',
+    index: '04',
+    input: '实时控制流量',
+    output: '风险处置与拦截日志',
   },
 ]
 
@@ -333,7 +344,7 @@ const capabilities = [
 
 .module-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -389,6 +400,11 @@ const capabilities = [
 .is-green .module-icon {
   background: #eaf7ef;
   color: #278554;
+}
+
+.is-amber .module-icon {
+  background: #fff5df;
+  color: #b56a13;
 }
 
 .module-card > strong {

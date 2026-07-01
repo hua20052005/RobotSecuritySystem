@@ -1,0 +1,486 @@
+% ============================================================
+% RobotSec / RobotSecuritySystem
+% 系统功能联调与工程性能测试（可直接纳入申报书）
+%
+% 建议导言区加载：
+% \usepackage{graphicx,float,booktabs,tabularx,array,listings,xcolor}
+% ============================================================
+
+% 截图尚未放入 figures 目录时，本宏会生成带说明的占位框；
+% 将同名图片放入 figures 目录后，无需修改正文即可自动显示。
+\providecommand{\RobotSecFigure}[5][0.92]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{#2}{%
+      \includegraphics[width=#1\linewidth]{#2}%
+    }{%
+      \fbox{\parbox[c][0.23\textheight][c]{0.88\linewidth}{%
+        \centering
+        \textbf{截图预留位置}\\[0.8em]
+        文件：\texttt{\detokenize{#2}}\\[0.6em]
+        #5
+      }}%
+    }
+    \caption{#3}
+    \label{#4}
+  \end{figure}
+}
+
+% ============================================================
+\section{系统功能联调与工程性能测试}
+\label{sec:system_integration}
+% ============================================================
+
+本节面向 RobotSec / RobotSecuritySystem 的工程化落地效果开展系统级功能联调、异常降级与性能验证。与前文侧重单一算法的离线准确率不同，本节重点验证系统是否已经形成从 PCAP 输入、三维检测、风险汇总、证据解释到任务追溯的完整闭环，并考察单个模型不可用时平台是否仍能保持可访问和可解释。
+
+RobotSec 面向机器人控制链路，采用“连接侧信道、通信载荷、动作时序”三个相互补充的检测维度：
+
+\begin{itemize}
+    \item \textbf{连接侧信道维度：}不依赖载荷明文，利用包长、方向、包间隔、IP、端口和连接关系识别离群通信；
+    \item \textbf{通信载荷维度：}利用 ET-BERT 包级和流级模型识别指令码、参数、格式以及连续窗口攻击；
+    \item \textbf{动作时序维度：}从控制流量恢复机器狗动作序列，并通过 PAPB 流程模型检查动作转移与任务流程一致性。
+\end{itemize}
+
+系统进一步提供统一三维分析入口。用户只需上传一次 PCAP，前端即可并行调用三个既有检测接口；单一维度失败不会覆盖其他维度已经产生的结果，最终页面依据最高有效风险给出综合结论，并保留各维度原始 JSON 证据。
+
+% ------------------------------------------------------------
+\subsection{系统架构与统一接口组织}
+\label{subsec:architecture}
+% ------------------------------------------------------------
+
+系统采用浏览器前端、FastAPI 统一后端、检测模型与本地任务数据库相结合的轻量化架构。前端基于 Vue 3、Vite、Element Plus 与 ECharts 实现，默认服务地址为 \texttt{http://localhost:5173}；后端基于 FastAPI，默认监听 \texttt{127.0.0.1:8010}。前端通过 Axios 上传 PCAP、传递检测参数并接收结构化结果，后端负责路由挂载、模型调用、任务持久化和历史证据查询。
+
+\begin{lstlisting}[language=bash,caption={RobotSec 部署与检测链路}]
+Browser
+  |
+  +-- Vue 3 + Vite frontend (5173)
+        |
+        +-- Axios / multipart form-data
+              |
+              +-- FastAPI unified backend (8010)
+                    |-- /api/side-channel/*
+                    |-- /api/etbert/*
+                    |-- /api/motion-recognition/*
+                    |-- /api/papb/*
+                    |-- /api/tasks/*
+                    |-- /api/auth/*
+                    |
+                    +-- models + process rules + task database
+\end{lstlisting}
+
+为避免重型模型影响系统整体可用性，ET-BERT 采用按需调用和就绪状态检查。统一入口在启动载荷检测前先读取 \texttt{/health} 返回的模型状态；若所需权重文件尚未部署，则将该维标记为“暂不可用”，继续执行侧信道和动作时序分析。ET-BERT 推理同时被隔离在独立工作进程中，使模型加载异常不会直接终止 FastAPI 主服务。
+
+\RobotSecFigure
+  {figures/system_architecture.png}
+  {RobotSec 系统部署与统一接口架构}
+  {fig:system_architecture}
+  {建议绘制浏览器、Vue 前端、FastAPI 后端、三个检测维度、PAPB 与任务数据库之间的连接关系。}
+
+前端页面与后端接口对应关系如表~\ref{tab:frontend_backend_routes} 所示。
+
+\begin{table}[H]
+\centering
+\caption{前端页面与后端接口对应关系}
+\label{tab:frontend_backend_routes}
+\small
+\begin{tabularx}{\linewidth}{p{0.18\linewidth}p{0.19\linewidth}p{0.27\linewidth}X}
+\toprule
+\textbf{页面} & \textbf{前端路由} & \textbf{主要后端接口} & \textbf{功能} \\
+\midrule
+系统总览 & \texttt{/} & \texttt{/health} & 品牌展示、检测链路和模块入口 \\
+三维统一分析 & \texttt{/unified-analysis} & 三类检测接口 & 一次上传、分维执行、综合判定和统一导出 \\
+侧信道分析 & \texttt{/side-channel} & \texttt{/api/side-channel/*} & 元数据离群检测、连接画像与二次判断 \\
+载荷检测 & \texttt{/payload} & \texttt{/api/etbert/*} & ET-BERT 包级、流级载荷检测 \\
+动作序列分析 & \texttt{/motion} & \texttt{/api/motion-recognition/*} & 动作恢复、PAPB 校验和转移风险分析 \\
+审计历史 & \texttt{/history} & \texttt{/api/tasks/*} & 历史任务检索、详情复核与证据导出 \\
+账户设置 & \texttt{/profile} & \texttt{/api/auth/*} & 用户认证与账户资料管理 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ------------------------------------------------------------
+\subsection{统一设计系统与工作台交互}
+\label{subsec:ui_workbench}
+% ------------------------------------------------------------
+
+系统界面采用白灰色安全审计平台风格，以低饱和蓝灰色表示主要操作，绿色、橙色、黄色和红色分别承担正常、容错、未知和异常状态提示。首页保留机器狗主视觉与大面积留白；内部页面采用统一的 AppShell、左侧导航、顶部服务状态栏和内容宽度，使产品入口与检测页面保持一致的视觉语言。
+
+公共前端组件包括 PageHeader、ModuleHero、UploadPanel、RiskBadge、ResultSummary、MetricCard、SectionBlock、EvidenceTable 与 JsonViewer。三个检测模块遵循统一交互结构：
+
+\begin{enumerate}
+    \item 上传 PCAP 并显示文件名、大小、格式和删除入口；
+    \item 配置检测模式、任务场景或算法参数；
+    \item 无文件时禁用检测按钮，运行中阻止重复提交；
+    \item 检测完成后自动滚动至风险摘要；
+    \item 通过指标、图表、Tabs 和证据表解释判定结果；
+    \item 支持复制任务编号、复制 JSON、下载结果或生成报告。
+\end{enumerate}
+
+\RobotSecFigure
+  {figures/homepage_robotsec.png}
+  {RobotSec 系统总览页面}
+  {fig:homepage_robotsec}
+  {截取首页首屏，应包含 RobotSec 品牌、机器人主视觉、“三维统一分析”按钮以及服务定位文案。}
+
+\RobotSecFigure
+  {figures/workbench_shell.png}
+  {白灰安全审计工作台与统一导航}
+  {fig:workbench_shell}
+  {截取任一内部页面，应包含分组侧栏、顶部页面说明、服务在线状态和模块输入输出说明区。}
+
+% ------------------------------------------------------------
+\subsection{三维统一分析入口联调}
+\label{subsec:unified_analysis}
+% ------------------------------------------------------------
+
+三维统一分析是系统级联调的核心入口。页面使用检测轮盘呈现侧信道、载荷和动作时序三个维度。用户可单独启用或关闭某个维度，并配置 ET-BERT 包级/流级模式和动作任务场景。提交后，前端为每个维度构造独立的 multipart 表单并调用原有接口，因此统一入口不会改变各算法模块的数据格式和接口边界。
+
+\begin{lstlisting}[language=bash,caption={三维统一分析执行流程}]
+Upload one PCAP
+  -> check enabled dimensions
+  -> check ET-BERT model readiness
+  -> run side-channel analysis
+  -> run payload analysis when available
+  -> run motion recognition + PAPB
+  -> retain successful dimension results
+  -> aggregate risk and export unified JSON
+\end{lstlisting}
+
+综合状态遵循“有效风险优先、运行故障不冒充攻击”的原则：
+
+\begin{table}[H]
+\centering
+\caption{统一风险状态与页面反馈}
+\label{tab:unified_status}
+\small
+\begin{tabularx}{\linewidth}{p{0.18\linewidth}p{0.16\linewidth}X p{0.25\linewidth}}
+\toprule
+\textbf{状态} & \textbf{颜色} & \textbf{含义} & \textbf{建议操作} \\
+\midrule
+\texttt{NORMAL} & 绿色 & 已运行维度均未发现明显风险 & 保存记录并持续监控 \\
+\texttt{TOLERATED} & 橙色 & 存在轻微离群或容错范围内的模板偏差 & 结合任务场景进行复核 \\
+\texttt{UNKNOWN} & 黄色 & 训练数据未覆盖，或部分检测维度不可用 & 人工审核或稍后补跑缺失维度 \\
+\texttt{ANOMALY} & 红色 & 至少一个有效维度发现明确异常证据 & 优先查看红色维度和证据明细 \\
+\texttt{ERROR} & 红灰色 & 所选检测维度均未成功执行 & 检查服务、模型和文件格式 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\RobotSecFigure
+  {figures/unified_entry_wheel.png}
+  {三维统一分析轮盘与一次上传入口}
+  {fig:unified_entry_wheel}
+  {上传前截图：包含 PCAP 上传区、载荷粒度、动作任务场景、三个轮盘节点和统一分析按钮。}
+
+\RobotSecFigure
+  {figures/unified_running.png}
+  {三维检测运行状态}
+  {fig:unified_running}
+  {上传后立即截图：轮盘节点应显示 RUNNING 或完成进度，按钮处于加载且不可重复提交。}
+
+\RobotSecFigure
+  {figures/unified_partial_result.png}
+  {单维不可用情况下的统一分析结果}
+  {fig:unified_partial_result}
+  {使用缺少 ET-BERT 权重的环境：展示载荷维“暂不可用”，同时保留侧信道和动作时序结果，统一状态为“检测尚不完整”。}
+
+\RobotSecFigure
+  {figures/unified_complete_result.png}
+  {三维完整检测的综合风险摘要}
+  {fig:unified_complete_result}
+  {在三个模型均就绪的环境中截图：包含综合状态、三个分维指标、任务编号、检测耗时和分维证据入口。}
+
+% ------------------------------------------------------------
+\subsection{侧信道流量分析功能测试}
+\label{subsec:side_channel}
+% ------------------------------------------------------------
+
+侧信道模块在不解析业务载荷语义的情况下，从包长、方向、发送间隔、IP、端口和连接关系中提取统计特征，并通过 IsolationForest 定位离群数据包。检测结果按“风险概览、IP/端口画像、异常包证据、二次判断、JSON 结果”组织，避免多个长表格连续堆叠。
+
+页面处理流程为：
+
+\begin{lstlisting}[language=bash,caption={侧信道分析流程}]
+PCAP upload
+  -> metadata extraction
+  -> IsolationForest outlier detection
+  -> risk summary
+  -> IP and port profiles
+  -> abnormal packet evidence
+  -> rule/LLM second-pass judgement
+  -> report export
+\end{lstlisting}
+
+二次判断将异常候选按照“源 IP $\rightarrow$ 目的 IP”聚合。规则层先处理可明确判定的连接，其余连接可交由大语言模型辅助研判；当大语言模型不可用时，页面显示降级原因，不影响基础异常包结果。
+
+\begin{table}[H]
+\centering
+\caption{侧信道模块功能验收项目}
+\label{tab:side_function}
+\small
+\begin{tabularx}{\linewidth}{p{0.25\linewidth}p{0.29\linewidth}X}
+\toprule
+\textbf{验收项} & \textbf{页面输出} & \textbf{通过条件} \\
+\midrule
+PCAP 解析 & 总包数、文件信息 & 后端完成解析且页面无格式错误 \\
+元数据检测 & 可疑包数、比例、平均分数 & 特征和 IsolationForest 结果可复现 \\
+连接画像 & IP、端口、服务与出现次数 & 表格字段完整，支持滚动查看 \\
+异常证据 & 包序号、源/目的、端口、分数 & 能定位到具体异常候选 \\
+二次判断 & 风险连接、理由、置信度 & 规则或 AI 结果可解释 \\
+报告导出 & Markdown 或结构化结果 & 下载文件内容与页面结果一致 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\RobotSecFigure
+  {figures/side_channel_summary.png}
+  {侧信道风险概览与关键指标}
+  {fig:side_channel_summary}
+  {检测完成后截图：包含审计结论、总包数、可疑包数、异常连接数和风险等级。}
+
+\RobotSecFigure
+  {figures/side_channel_evidence.png}
+  {侧信道异常包证据与二次判断}
+  {fig:side_channel_evidence}
+  {依次截取“异常包证据”和“二次判断”Tabs，至少包含一条候选连接、判定理由和风险标签。}
+
+% ------------------------------------------------------------
+\subsection{ET-BERT 双粒度载荷检测测试}
+\label{subsec:payload}
+% ------------------------------------------------------------
+
+载荷检测模块提供包级和流级两种粒度。包级模型对单个控制报文进行分类，识别指令码、参数值和字段格式异常；流级模型以连续 32 包为窗口，识别注入、泛洪、方向振荡和扫描等具有上下文特征的攻击行为。
+
+页面结果包括检测样本数、异常比例、主要类别、低置信度样本数，以及类别分布、协议分布、前 100 条明细和原始 JSON。低置信度样本单独成组，便于识别训练集未覆盖的潜在未知攻击。
+
+考虑到深度模型权重可能尚未部署，系统将模型可用性纳入健康检查。缺少 \texttt{packet\_finetune.bin} 或 \texttt{flow\_finetune.bin} 时，统一入口不启动对应推理，而是返回“该维度暂不可用”；载荷独立页面则保留错误原因和重试入口。该设计将“模型运行故障”与“检测到攻击”区分开，避免将工程异常错误解释为业务风险。
+
+\begin{table}[H]
+\centering
+\caption{ET-BERT 双粒度功能验收}
+\label{tab:etbert_function}
+\small
+\begin{tabularx}{\linewidth}{p{0.20\linewidth}p{0.26\linewidth}p{0.25\linewidth}X}
+\toprule
+\textbf{模式} & \textbf{检测对象} & \textbf{主要输出} & \textbf{验收状态} \\
+\midrule
+包级检测 & 单个控制报文 & 异常类别、置信度、Top-3 概率 & 模型部署后测试 \\
+流级检测 & 连续 32 包窗口 & 流级攻击类别与分布 & 模型部署后测试 \\
+低置信度复核 & 置信度低于阈值的样本 & 独立证据列表 & 页面功能已实现 \\
+模型缺失降级 & 权重文件未部署 & 显示维度不可用，其他维继续 & 降级逻辑已实现 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\RobotSecFigure
+  {figures/payload_packet_result.png}
+  {ET-BERT 包级检测结果}
+  {fig:payload_packet_result}
+  {模型部署后截图：包含包级模式、异常比例、主要类别、类别分布和前 100 条明细。}
+
+\RobotSecFigure
+  {figures/payload_unavailable.png}
+  {ET-BERT 模型不可用的温和降级状态}
+  {fig:payload_unavailable}
+  {当前缺失权重环境即可截图：显示载荷维无法运行、错误原因和重试入口，不应出现整个系统崩溃。}
+
+% ------------------------------------------------------------
+\subsection{动作序列识别与 PAPB 流程校验}
+\label{subsec:motion_papb}
+% ------------------------------------------------------------
+
+动作序列模块完成从控制流量到业务行为的端到端恢复。工程主路径采用“固定动作指令 + 0x30/0x31 摇杆移动段”融合方法，生成带时间信息和来源信息的动作序列，再自动送入 PAPB 模型进行场景约束、上下文转移概率、正常模板与硬规则校验。
+
+\begin{lstlisting}[language=bash,caption={动作序列与 PAPB 联合检测流程}]
+PCAP upload
+  -> fixed command recognition
+  -> joystick movement segment recognition
+  -> ordered action timeline
+  -> scenario-aware PAPB validation
+  -> NORMAL / TOLERATED / UNKNOWN / ANOMALY
+  -> evidence and JSON export
+\end{lstlisting}
+
+结果页首先展示流程结论和最高风险，然后给出识别动作数、转移风险、判定依据数量和模板相似度。动作时间线显示动作名称、发生时间、来源和置信度；高风险节点使用红色提示。系统同时提供逐步转移风险柱状图和转移判定分布环形图，使用户能够从整体趋势和单步证据两个层面理解结果。
+
+\begin{table}[H]
+\centering
+\caption{动作识别与 PAPB 离线评测记录}
+\label{tab:motion_offline_result}
+\small
+\begin{tabularx}{\linewidth}{p{0.28\linewidth}p{0.30\linewidth}X}
+\toprule
+\textbf{测试集} & \textbf{结果} & \textbf{说明} \\
+\midrule
+历史 55 条混合序列 & 31/55 完全正确，平均相似度 85.6\% & 包含早期采集和多批次数据 \\
+最新 13 条序列 & 11/13 完全正确，平均相似度 96.2\% & 推荐作为演示与复测样本 \\
+最新 13 条完整链路 & 13/13 返回 \texttt{NORMAL} & 动作识别后自动进入 PAPB \\
+47 条标准正常流程 & 47/47 返回 \texttt{NORMAL} & 已知正常流程全部通过 \\
+4 条明显异常流程 & 4/4 返回 \texttt{ANOMALY} & 重复高风险动作和非法组合可识别 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\RobotSecFigure
+  {figures/motion_normal_timeline.png}
+  {正常动作流程结论与动作时间线}
+  {fig:motion_normal_timeline}
+  {上传正常 PCAP：截图应包含绿色 NORMAL、动作时间线、识别动作数、风险分数和模板相似度。}
+
+\RobotSecFigure
+  {figures/motion_transition_charts.png}
+  {动作转移风险柱状图与判定分布环形图}
+  {fig:motion_transition_charts}
+  {切换至“时间线概览”，完整截取逐步转移风险柱状图和 NORMAL/DEVIATION/ANOMALY 环形图。}
+
+\RobotSecFigure
+  {figures/motion_anomaly_evidence.png}
+  {异常动作流程与判定依据}
+  {fig:motion_anomaly_evidence}
+  {上传理论异常序列：截图应包含红色 ANOMALY、红色时间线节点、禁止规则或低概率转移说明。}
+
+% ------------------------------------------------------------
+\subsection{用户认证、审计历史与证据追溯}
+\label{subsec:audit_history}
+% ------------------------------------------------------------
+
+RobotSec 支持用户注册、登录、访问控制和任务历史追溯。未登录用户访问历史或账户页面时，路由守卫给出登录提示并返回分析工作台。各独立检测接口在任务完成后保存模块名称、时间、参数、摘要和结构化结果；历史页面支持按模块、时间和关键词过滤，点击任务行后在右侧抽屉中展示任务摘要、完整 JSON 和 AI 报告。
+
+\begin{table}[H]
+\centering
+\caption{认证与证据追溯功能验收}
+\label{tab:auth_history}
+\small
+\begin{tabularx}{\linewidth}{p{0.25\linewidth}p{0.34\linewidth}X}
+\toprule
+\textbf{测试项目} & \textbf{预期行为} & \textbf{截图/记录} \\
+\midrule
+登录与注册 & 完成账户创建和登录状态更新 & 登录对话框与用户头像 \\
+未登录拦截 & 历史、账户页面提示登录 & 路由提示信息 \\
+任务写入 & 独立检测结果进入任务数据库 & 历史任务列表 \\
+条件检索 & 支持模块、时间、关键词过滤 & 筛选后的任务列表 \\
+详情复核 & 抽屉展示摘要、JSON 和报告 & 任务证据抽屉 \\
+结果导出 & 下载任务 JSON 或分析报告 & 导出文件与页面结果对照 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\RobotSecFigure
+  {figures/history_and_detail.png}
+  {审计历史列表与任务证据详情}
+  {fig:history_and_detail}
+  {建议拼接两张图：左侧为带风险标签的任务列表，右侧为点击任务后打开的详情抽屉。}
+
+% ------------------------------------------------------------
+\subsection{实际样本联调记录}
+\label{subsec:actual_sample}
+% ------------------------------------------------------------
+
+为验证统一链路的真实可运行性，选取 \texttt{seq2\_2.pcap} 进行联调。文件大小为 1,452,466 字节。测试使用统一入口默认参数：侧信道特征选择包长、发送间隔和目的端口，异常比例预估为 6\%；动作识别使用 command 融合路径和 general 场景；载荷维使用 ET-BERT 包级模式。
+
+\begin{table}[H]
+\centering
+\caption{\texttt{seq2\_2.pcap} 实际联调结果}
+\label{tab:seq2_actual_result}
+\small
+\begin{tabularx}{\linewidth}{p{0.20\linewidth}p{0.18\linewidth}p{0.24\linewidth}X}
+\toprule
+\textbf{检测维度} & \textbf{接口状态} & \textbf{处理结果} & \textbf{联调结论} \\
+\midrule
+侧信道 & HTTP 200 & 17,712 包；1,063 个离群包；比例 6.0016\% & 模块正常，单次处理约 3.88 s \\
+动作时序/PAPB & HTTP 200 & \texttt{stand -> jump -> stand}；\texttt{NORMAL} & 动作与流程校验正常，单次处理约 0.78 s \\
+ET-BERT 包级 & 模型未就绪 & 缺少 \texttt{packet\_finetune.bin} & 统一入口应标记该维不可用，不影响另外两维 \\
+综合结果 & 部分完成 & 两个维度成功，一个维度不可用 & 综合状态应为“检测尚不完整”，保留成功证据 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+该测试表明，侧信道和动作时序模块能够对同一真实 PCAP 形成互补证据：前者观察到约 6\% 的统计离群包，后者恢复出完整动作序列并判定流程正常。二者并不矛盾：IsolationForest 输出的是文件内部的统计离群候选，而 PAPB 判断的是业务动作顺序是否合法。最终是否构成安全事件，应结合二次连接判断、载荷检测和现场任务上下文进行综合解释。
+
+\RobotSecFigure
+  {figures/seq2_unified_result.png}
+  {\texttt{seq2\_2.pcap} 统一分析结果}
+  {fig:seq2_unified_result}
+  {上传指定文件后截图：侧信道显示约 6.00\%，动作维显示 NORMAL，载荷维显示暂不可用，顶部显示“检测尚不完整”。}
+
+% ------------------------------------------------------------
+\subsection{性能、稳定性与异常恢复测试}
+\label{subsec:performance}
+% ------------------------------------------------------------
+
+工程性能测试不仅关注模型推理速度，还需要覆盖页面加载、上传响应、健康检查、异常降级、连续任务和结果完整性。建议在最终验收环境中统一记录 CPU、内存和磁盘峰值，并避免将模型文件尚未部署的状态填写为算法性能失败。
+
+\begin{table}[H]
+\centering
+\caption{工程性能测试记录表}
+\label{tab:performance_record}
+\small
+\begin{tabularx}{\linewidth}{p{0.24\linewidth}p{0.24\linewidth}p{0.20\linewidth}X}
+\toprule
+\textbf{测试项目} & \textbf{输入/方式} & \textbf{当前结果} & \textbf{后续验收要求} \\
+\midrule
+前端生产构建 & \texttt{npm run build} & 构建通过 & 记录构建时间和产物体积 \\
+侧信道单次时延 & \texttt{seq2\_2.pcap} & 约 3.88 s & 在同一设备重复 10 次取均值 \\
+动作/PAPB 单次时延 & \texttt{seq2\_2.pcap} & 约 0.78 s & 统计多动作序列的均值与 P95 \\
+ET-BERT 单次时延 & 模型未部署 & 暂不统计 & 权重部署后分别测试包级与流级 \\
+统一入口部分失败 & 模拟载荷维不可用 & 降级逻辑已实现 & 重启后完成页面级复测 \\
+连续检测稳定性 & 连续执行 10/30 次 & 待测 & 服务不中断，任务完整写入 \\
+大文件处理 & 10 MB / 100 MB PCAP & 待测 & 无崩溃，超时提示明确 \\
+健康检查响应 & 检测期间访问 \texttt{/health} & 待测 & 返回服务和模型就绪状态 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{异常输入与恢复能力测试}
+\label{tab:recovery_test}
+\small
+\begin{tabularx}{\linewidth}{p{0.25\linewidth}p{0.30\linewidth}X}
+\toprule
+\textbf{异常场景} & \textbf{预期行为} & \textbf{验收证据} \\
+\midrule
+未上传文件 & 检测按钮禁用 & 配置区截图 \\
+非 PCAP 文件 & 返回格式错误，不影响服务 & 错误提示和健康检查 \\
+ET-BERT 权重缺失 & 载荷维不可用，其余维继续 & 统一部分结果截图 \\
+单接口超时 & 对应维显示失败，保留其他结果 & 分维状态和统一 JSON \\
+后端离线 & 顶部状态变为离线并提示重试 & 离线页面截图 \\
+空证据表 & 显示友好空状态 & 空状态截图 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ------------------------------------------------------------
+\subsection{截图证据采集清单}
+\label{subsec:screenshot_checklist}
+% ------------------------------------------------------------
+
+为使申报书同时体现界面完成度、真实处理过程和异常恢复能力，建议最终至少采集表~\ref{tab:screenshot_checklist} 中的截图。截图应采用统一浏览器尺寸，建议桌面端使用 1366$\times$768 或 1440$\times$900；涉及长表格时仅截取标题、关键行和状态标签，避免整页缩放后文字不可读。
+
+\begin{table}[H]
+\centering
+\caption{申报书建议截图清单}
+\label{tab:screenshot_checklist}
+\scriptsize
+\begin{tabularx}{\linewidth}{p{0.26\linewidth}p{0.24\linewidth}X}
+\toprule
+\textbf{文件名} & \textbf{页面/状态} & \textbf{必须包含的内容} \\
+\midrule
+\texttt{homepage\_robotsec.png} & 首页 & 机器人主视觉、系统名称、三维统一分析按钮 \\
+\texttt{unified\_entry\_wheel.png} & 统一入口上传前 & 上传区、三个轮盘节点、模式和场景设置 \\
+\texttt{unified\_running.png} & 统一入口运行中 & RUNNING 状态、进度、禁用的提交按钮 \\
+\texttt{unified\_complete\_result.png} & 三维全部成功 & 综合状态、三个维度指标、任务编号和耗时 \\
+\texttt{unified\_partial\_result.png} & ET-BERT 不可用 & 两维成功、一维不可用、检测不完整提示 \\
+\texttt{side\_channel\_summary.png} & 侧信道结果 & 总包、可疑包、异常连接、风险结论 \\
+\texttt{side\_channel\_evidence.png} & 侧信道证据 & 异常包、连接、风险标签和二次判断理由 \\
+\texttt{payload\_packet\_result.png} & 包级结果 & 异常比例、类别分布、低置信度与明细 \\
+\texttt{payload\_unavailable.png} & 模型不可用 & 温和错误提示、重试入口、服务仍在线 \\
+\texttt{motion\_normal\_timeline.png} & 正常动作流程 & NORMAL、时间线、来源、时间和置信度 \\
+\texttt{motion\_transition\_charts.png} & 动作可视化 & 风险柱状图和判定分布环形图 \\
+\texttt{motion\_anomaly\_evidence.png} & 异常动作流程 & ANOMALY、红色节点、具体异常依据 \\
+\texttt{history\_and\_detail.png} & 审计历史 & 风险标签、筛选栏和任务证据抽屉 \\
+\texttt{service\_offline.png} & 后端离线 & 顶部离线状态和可理解的错误提示 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+综上，RobotSec 已由独立算法验证页面演进为面向机器人控制链路的统一安全审计平台。系统能够从连接统计、载荷语义和业务动作三个层面组织检测证据，并通过统一状态、可视化图表、结构化 JSON 和历史任务形成可追溯闭环。后续工作主要集中于补齐 ET-BERT 权重后的完整三维复测、扩充异常 PCAP 样本以及完成多文件规模下的性能与稳定性统计。

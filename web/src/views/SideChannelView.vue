@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import api from '../api/client'
 import JsonViewer from '../components/JsonViewer.vue'
+import LiveCapturePanel from '../components/LiveCapturePanel.vue'
 import MarkdownReport from '../components/MarkdownReport.vue'
 import MetricCard from '../components/MetricCard.vue'
 import ModuleHero from '../components/ModuleHero.vue'
@@ -30,6 +31,22 @@ const activeTab = ref('overview')
 const errorMessage = ref('')
 const elapsedMs = ref(0)
 const resultRef = ref(null)
+const inputMode = ref('file')
+const liveExtraConfig = computed(() => ({
+  features: selectedFeatures.value,
+  contamination: Number(contamination.value),
+  target_ip: targetIp.value.trim(),
+}))
+
+const handleLiveResult = async (data) => {
+  result.value = data
+  elapsedMs.value = 0
+  aiReport.value = ''
+  judgeResult.value = null
+  activeTab.value = 'overview'
+  await nextTick()
+  renderCharts()
+}
 
 const summary = computed(() => result.value?.summary || { total: 0, abnormal: 0, ratio: 0, avg_score: 0 })
 const anomalyTable = computed(() => result.value?.anomalies || { columns: [], rows: [], total: 0, limit: 0 })
@@ -397,7 +414,14 @@ watch(activeTab, async () => {
       <div class="pill-badge">PCAP / PCAPNG</div>
     </div>
 
-    <div class="analysis-input-grid">
+    <div class="input-mode-switch">
+      <el-radio-group v-model="inputMode">
+        <el-radio-button value="file">文件分析</el-radio-button>
+        <el-radio-button value="live">实时监测</el-radio-button>
+      </el-radio-group>
+    </div>
+
+    <div v-if="inputMode === 'file'" class="analysis-input-grid">
       <UploadPanel
         :file-list="fileList"
         :selected-file="selectedFile"
@@ -434,6 +458,34 @@ watch(activeTab, async () => {
           <span class="pill-badge">最多展示 5000 个散点</span>
         </div>
       </div>
+    </div>
+
+    <div v-else class="live-analysis-stack">
+      <div class="live-module-options">
+        <label class="control-field">
+          <span>实时特征</span>
+          <el-checkbox-group v-model="selectedFeatures">
+            <el-checkbox v-for="item in featureOptions" :key="item.key" :value="item.key">
+              {{ item.label }}
+            </el-checkbox>
+          </el-checkbox-group>
+        </label>
+        <label class="control-field">
+          <span>异常比例预估：{{ (contamination * 100).toFixed(0) }}%</span>
+          <el-slider v-model="contamination" :min="0.01" :max="0.2" :step="0.01" />
+        </label>
+        <label class="control-field">
+          <span>目标 IP</span>
+          <el-input v-model="targetIp" placeholder="可留空" />
+        </label>
+      </div>
+      <LiveCapturePanel
+        endpoint="/api/side-channel/live"
+        expected-module="side_channel"
+        :extra-config="liveExtraConfig"
+        :default-window="8"
+        @result="handleLiveResult"
+      />
     </div>
   </section>
 

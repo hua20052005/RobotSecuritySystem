@@ -9,6 +9,7 @@ import {
   DocumentChecked,
   HomeFilled,
   Lock,
+  SetUp,
   User,
 } from '@element-plus/icons-vue'
 
@@ -26,6 +27,7 @@ const analysisItems = [
   { to: '/side-channel', label: '侧信道分析', icon: DataAnalysis },
   { to: '/payload', label: '载荷检测', icon: Lock },
   { to: '/motion', label: '动作序列分析', icon: Connection },
+  { to: '/defense', label: '系统集成防御', icon: SetUp },
 ]
 const accountItems = [
   { to: '/history', label: '审计历史', icon: Clock },
