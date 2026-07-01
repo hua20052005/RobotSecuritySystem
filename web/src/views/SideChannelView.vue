@@ -442,7 +442,7 @@ watch(activeTab, async () => {
       :status="auditStatus"
       :title="`审计结论：${auditStatusText}`"
       :description="judgeResult?.assessment || `IsolationForest 在当前文件中标记了 ${summary.abnormal || 0} 个离群数据包。`"
-      :advice="auditStatus === 'ANOMALY' ? '查看异常包证据并运行二次判断，确认风险连接来源。' : '继续查看 IP 与端口画像，保留本次审计记录。'"
+      :advice="auditStatus === 'ANOMALY' ? '切到「二次判断」页点击开始判断，确认风险连接来源。' : '继续查看 IP 与端口画像，保留本次审计记录。'"
       :task-id="result.run_id"
       :duration="`${(elapsedMs / 1000).toFixed(2)} s`"
     >
@@ -533,9 +533,6 @@ watch(activeTab, async () => {
       </div>
       <div class="action-row">
         <span class="pill-badge">前 {{ result.anomalies.limit }} 条</span>
-        <el-button :loading="judgeLoading" :disabled="!anomalyTable.rows?.length" @click="runJudge">
-          二次判断
-        </el-button>
       </div>
     </div>
 
@@ -564,6 +561,14 @@ watch(activeTab, async () => {
       </div>
       <div class="action-row">
         <span class="pill-badge">LLM: {{ judgeMeta?.used ? (judgeMeta?.model || '已启用') : '未启用' }}</span>
+        <el-button
+          type="primary"
+          :loading="judgeLoading"
+          :disabled="!anomalyTable.rows?.length"
+          @click="runJudge"
+        >
+          {{ judgeResult ? '重新判断' : '开始二次判断' }}
+        </el-button>
       </div>
     </div>
 
@@ -608,7 +613,7 @@ watch(activeTab, async () => {
       </el-table>
     </div>
     <div v-else class="empty-state">
-      先在“异常包证据”中运行二次判断，这里将展示规则与 AI 的分组审计结论。
+      点击右上角「开始二次判断」，按 源 → 目的 聚合异常候选，规则先定、剩下交 LLM 一次研判。
     </div>
   </section>
 
