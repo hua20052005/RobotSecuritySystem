@@ -1,5 +1,6 @@
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as echarts from 'echarts'
 
 import api from '../api/client'
 import JsonViewer from '../components/JsonViewer.vue'
@@ -20,12 +21,25 @@ const activeTab = ref('overview')
 const errorMessage = ref('')
 const elapsedMs = ref(0)
 const resultRef = ref(null)
+const transitionRiskChartRef = ref(null)
+const transitionDecisionChartRef = ref(null)
+let transitionRiskChart = null
+let transitionDecisionChart = null
 
 const method = ref('command')
 const minSegmentS = ref(0.25)
 const stepS = ref(0.5)
 const segmentPenalty = ref(0.02)
 const scenario = ref('general')
+const inputMode = ref('file')
+const liveStatus = ref(null)
+const liveBusy = ref(false)
+const liveHost = ref('192.168.2.1')
+const liveUsername = ref('ysc')
+const liveInterface = ref('p2p0')
+const liveSudoPassword = ref('')
+const liveCaptureSeconds = ref(8)
+let livePollTimer = null
 
 const methodOptions = [
   { label: '指令 + 摇杆融合（推荐）', value: 'command' },
@@ -47,6 +61,7 @@ const violations = computed(() => flow.value?.violations || [])
 const transitions = computed(() => flow.value?.transition_check?.transitions || [])
 const candidates = computed(() => flow.value?.candidate_matches || [])
 const selectedFileName = computed(() => selectedFile.value?.name || '')
+const liveRunning = computed(() => Boolean(liveStatus.value?.running))
 const segments = computed(() =>
   (result.value?.recognition?.actions || []).map((row, index) => {
     const start = Number(row.t_start_s ?? row.start_s ?? row.time_s ?? 0)
@@ -155,6 +170,149 @@ const timeline = computed(() =>
   }),
 )
 
+const renderTransitionCharts = () => {
+  if (!result.value || activeTab.value !== 'overview') return
+  transitionRiskChart?.dispose()
+  transitionDecisionChart?.dispose()
+
+  if (transitionRiskChartRef.value) {
+    transitionRiskChart = echarts.init(transitionRiskChartRef.value)
+    transitionRiskChart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 46, right: 18, top: 18, bottom: 62 },
+      xAxis: {
+        type: 'category',
+        data: transitions.value.map((item) => `${item.previous}→${item.actual}`),
+        axisLabel: { rotate: transitions.value.length > 5 ? 28 : 0, color: '#74808b', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#dce3e7' } },
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: 1,
+        name: '风险',
+        axisLabel: { color: '#74808b' },
+        splitLine: { lineStyle: { color: '#edf1f3' } },
+      },
+      series: [{
+        type: 'bar',
+        barMaxWidth: 28,
+        data: transitions.value.map((item) => ({
+          value: Number(item.risk || 0),
+          itemStyle: {
+            color: item.decision === 'ANOMALY' ? '#c6454f' : item.decision === 'DEVIATION' ? '#c56a22' : '#345d9d',
+            borderRadius: [3, 3, 0, 0],
+          },
+        })),
+      }],
+    })
+  }
+
+  if (transitionDecisionChartRef.value) {
+    const counts = transitions.value.reduce((acc, item) => {
+      const key = item.decision || 'UNKNOWN'
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+    const colors = { NORMAL: '#238557', DEVIATION: '#c56a22', ANOMALY: '#c6454f', UNKNOWN: '#aa7a16' }
+    transitionDecisionChart = echarts.init(transitionDecisionChartRef.value)
+    transitionDecisionChart.setOption({
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { bottom: 0, textStyle: { color: '#74808b', fontSize: 10 } },
+      series: [{
+        type: 'pie',
+        radius: ['48%', '70%'],
+        center: ['50%', '45%'],
+        label: { formatter: '{b}\n{c}', color: '#43505d', fontSize: 10 },
+        data: Object.entries(counts).map(([name, value]) => ({
+          name,
+          value,
+          itemStyle: { color: colors[name] || '#7d8791' },
+        })),
+      }],
+    })
+  }
+}
+
+watch([result, activeTab], async () => {
+  await nextTick()
+  renderTransitionCharts()
+}, { flush: 'post' })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeTransitionCharts)
+  if (livePollTimer) window.clearInterval(livePollTimer)
+  transitionRiskChart?.dispose()
+  transitionDecisionChart?.dispose()
+})
+
+const resizeTransitionCharts = () => {
+  transitionRiskChart?.resize()
+  transitionDecisionChart?.resize()
+}
+
+const pollLiveStatus = async () => {
+  try {
+    const { data } = await api.get('/api/motion-recognition/live/status', { timeout: 10000 })
+    liveStatus.value = data
+    if (data.latest_result && data.latest_result.run_id !== result.value?.run_id) {
+      result.value = data.latest_result
+      activeTab.value = 'overview'
+    }
+  } catch (error) {
+    liveStatus.value = {
+      running: false,
+      phase: 'error',
+      message: '无法连接实时监测后端',
+      latest_error: errorText(error),
+    }
+  }
+}
+
+const startLiveMonitoring = async () => {
+  liveBusy.value = true
+  errorMessage.value = ''
+  result.value = null
+  try {
+    const { data } = await api.post('/api/motion-recognition/live/start', {
+      host: liveHost.value,
+      username: liveUsername.value,
+      interface: liveInterface.value,
+      sudo_password: liveSudoPassword.value,
+      capture_seconds: Number(liveCaptureSeconds.value),
+      scenario: scenario.value,
+      method: 'command',
+    }, { timeout: 15000 })
+    liveStatus.value = data
+    liveSudoPassword.value = ''
+    ElMessage.success('实时监测已启动')
+  } catch (error) {
+    errorMessage.value = errorText(error, '实时监测启动失败')
+    ElMessage.error(errorMessage.value)
+  } finally {
+    liveBusy.value = false
+  }
+}
+
+const stopLiveMonitoring = async () => {
+  liveBusy.value = true
+  try {
+    const { data } = await api.post('/api/motion-recognition/live/stop', null, { timeout: 15000 })
+    liveStatus.value = data
+    ElMessage.success('实时监测已停止')
+  } catch (error) {
+    ElMessage.error(errorText(error, '停止实时监测失败'))
+  } finally {
+    liveBusy.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', resizeTransitionCharts)
+  pollLiveStatus()
+  livePollTimer = window.setInterval(pollLiveStatus, 2000)
+})
+
 const mainReason = computed(() => evidenceRows.value[0]?.reason || statusMeta.value.explain)
 const onFileChange = (file) => {
   handleChange(file)
@@ -241,7 +399,17 @@ const exportJson = () => {
       <el-tag v-if="result" :type="statusMeta.type" size="large" effect="dark">{{ statusMeta.text }}</el-tag>
     </div>
 
-    <div class="analysis-input-grid">
+    <div class="input-mode-switch">
+      <el-radio-group v-model="inputMode">
+        <el-radio-button value="file">文件分析</el-radio-button>
+        <el-radio-button value="live">实时监测</el-radio-button>
+      </el-radio-group>
+      <span v-if="inputMode === 'live'" class="live-indicator" :class="{ active: liveRunning }">
+        <i></i>{{ liveRunning ? '监测中' : '未运行' }}
+      </span>
+    </div>
+
+    <div v-if="inputMode === 'file'" class="analysis-input-grid">
       <UploadPanel
         :file-list="fileList"
         :selected-file="selectedFile"
@@ -305,6 +473,80 @@ const exportJson = () => {
         </div>
       </div>
     </div>
+
+    <div v-else class="live-workbench">
+      <div class="live-connection">
+        <div class="field-heading">
+          <strong>机器狗连接</strong>
+          <span>后端主机需要能够通过 SSH 访问机器狗</span>
+        </div>
+        <div class="live-field-grid">
+          <label class="control-field">
+            <span>机器狗地址</span>
+            <el-input v-model="liveHost" :disabled="liveRunning" />
+          </label>
+          <label class="control-field">
+            <span>SSH 用户</span>
+            <el-input v-model="liveUsername" :disabled="liveRunning" />
+          </label>
+          <label class="control-field">
+            <span>监听网卡</span>
+            <el-input v-model="liveInterface" :disabled="liveRunning" />
+          </label>
+          <label class="control-field">
+            <span>sudo 密码</span>
+            <el-input
+              v-model="liveSudoPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              :disabled="liveRunning"
+              placeholder="仅在启动时使用"
+            />
+          </label>
+          <label class="control-field">
+            <span>分析窗口（秒）</span>
+            <el-input-number v-model="liveCaptureSeconds" :min="2" :max="60" :step="1" :disabled="liveRunning" />
+          </label>
+          <label class="control-field">
+            <span>任务场景</span>
+            <el-select v-model="scenario" :disabled="liveRunning">
+              <el-option v-for="item in scenarioOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+        </div>
+      </div>
+
+      <div class="live-console">
+        <div class="live-console-head">
+          <strong>采集状态</strong>
+          <el-tag :type="liveRunning ? 'success' : liveStatus?.phase === 'error' ? 'danger' : 'info'">
+            {{ liveStatus?.phase || 'idle' }}
+          </el-tag>
+        </div>
+        <p>{{ liveStatus?.message || '启动后将滚动抓取流量并自动识别。' }}</p>
+        <p v-if="liveStatus?.latest_error" class="live-error">{{ liveStatus.latest_error }}</p>
+        <dl class="live-metrics">
+          <div><dt>已分析窗口</dt><dd>{{ liveStatus?.window_count || 0 }}</dd></div>
+          <div><dt>已采集数据</dt><dd>{{ ((liveStatus?.packet_bytes || 0) / 1024).toFixed(1) }} KB</dd></div>
+          <div><dt>累计动作</dt><dd>{{ liveStatus?.actions?.length || 0 }}</dd></div>
+        </dl>
+        <div class="action-row">
+          <el-button
+            v-if="!liveRunning"
+            type="primary"
+            size="large"
+            :loading="liveBusy"
+            @click="startLiveMonitoring"
+          >
+            开始实时监测
+          </el-button>
+          <el-button v-else type="danger" size="large" :loading="liveBusy" @click="stopLiveMonitoring">
+            停止监测
+          </el-button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section v-if="result" ref="resultRef" class="result-overview fade-in">
@@ -353,6 +595,17 @@ const exportJson = () => {
       上方时间线按照抓包中的发生顺序恢复动作；红色节点表示对应转移被判为低概率、未见或明确异常。
     </p>
   </SectionBlock>
+
+  <section v-if="result && activeTab === 'overview' && transitions.length" class="analysis-grid fade-in motion-chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">逐步转移风险</div>
+      <div ref="transitionRiskChartRef" class="chart-box"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">转移判定分布</div>
+      <div ref="transitionDecisionChartRef" class="chart-box"></div>
+    </div>
+  </section>
 
   <section v-if="result && activeTab === 'details'" class="grid-2 result-detail-grid fade-in">
     <div class="panel">
@@ -475,6 +728,110 @@ const exportJson = () => {
 
 .motion-workbench {
   border-top: 3px solid var(--accent);
+}
+
+.input-mode-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-indicator i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9aa5af;
+}
+
+.live-indicator.active {
+  color: #17653b;
+}
+
+.live-indicator.active i {
+  background: #238557;
+  box-shadow: 0 0 0 4px rgba(35, 133, 87, 0.12);
+}
+
+.live-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
+  gap: 22px;
+}
+
+.live-connection,
+.live-console {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.live-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.live-console {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  background: var(--surface);
+}
+
+.live-console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.live-console p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.live-console .live-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.live-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-block: 1px solid var(--line-soft);
+}
+
+.live-metrics div {
+  display: grid;
+  gap: 5px;
+  padding: 12px 7px;
+  text-align: center;
+}
+
+.live-metrics dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.live-metrics dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
 }
 
 .field-heading,
@@ -756,6 +1113,11 @@ const exportJson = () => {
 
 @media (max-width: 760px) {
   .analysis-input-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .live-workbench,
+  .live-field-grid {
     grid-template-columns: 1fr;
   }
 

@@ -17,6 +17,7 @@ from backend.ai_report import router as ai_report_router
 from backend.auth_api import router as auth_router
 from backend.db import create_task, init_db
 from backend.motion_api import router as motion_router
+from backend.live_motion_api import router as live_motion_router
 from backend.motion_recognition_api import router as motion_recognition_router
 from backend.papb_api import router as papb_router
 from backend.side_channel_api import router as side_channel_router
@@ -33,6 +34,11 @@ except Exception as exc:  # ET-BERT is optional when model/runtime dependencies 
     ETBERT_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ETBERT_MODEL_ROOT = PROJECT_ROOT / "ET-BERT-main" / "models"
+ETBERT_MODEL_FILES = {
+    "packet": ETBERT_MODEL_ROOT / "packet_finetune.bin",
+    "flow": ETBERT_MODEL_ROOT / "flow_finetune.bin",
+}
 PAYLOAD_ROOT = PROJECT_ROOT / "payload-detection"
 SCRIPT_PATH = PAYLOAD_ROOT / "scripts" / "detect_from_pcap.py"
 DEFAULT_ENSEMBLE = PAYLOAD_ROOT / "models" / "ensemble_classifier_improved.pkl"
@@ -55,6 +61,7 @@ app.include_router(auth_router)
 app.include_router(ai_report_router)
 app.include_router(motion_router)
 app.include_router(motion_recognition_router)
+app.include_router(live_motion_router)
 app.include_router(papb_router)
 app.include_router(tasks_router)
 if etbert_app is not None:
@@ -81,11 +88,27 @@ def _read_csv_preview(csv_path: Path, max_rows: int = 200) -> List[Dict[str, str
 
 @app.get("/health")
 def health() -> Dict[str, object]:
+    etbert_models = {
+        key: path.is_file()
+        for key, path in ETBERT_MODEL_FILES.items()
+    }
+    missing_models = [
+        path.name
+        for key, path in ETBERT_MODEL_FILES.items()
+        if not etbert_models[key]
+    ]
+    etbert_ready = etbert_app is not None and not missing_models
     return {
         "status": "ok",
         "service": "payload-backend",
-        "etbert_available": etbert_app is not None,
-        "etbert_error": ETBERT_IMPORT_ERROR,
+        "etbert_available": etbert_ready,
+        "etbert_models": etbert_models,
+        "etbert_error": ETBERT_IMPORT_ERROR
+        or (
+            f"missing model files: {', '.join(missing_models)}"
+            if missing_models
+            else None
+        ),
     }
 
 

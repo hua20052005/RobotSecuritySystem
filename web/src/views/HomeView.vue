@@ -65,7 +65,7 @@ const capabilities = [
       </RouterLink>
       <div class="home-nav-actions">
         <button type="button" @click="openAuth?.('login')">登录</button>
-        <el-button type="primary" @click="router.push('/side-channel')">进入工作台</el-button>
+        <el-button type="primary" @click="router.push('/unified-analysis')">进入工作台</el-button>
       </div>
     </header>
 
@@ -75,8 +75,8 @@ const capabilities = [
         <h1>机器人控制流量<br>安全审计系统</h1>
         <p>把通信侧信道、载荷内容和动作时序放入一条清晰的审计链路，从原始抓包追踪到可解释的异常证据。</p>
         <div class="hero-actions">
-          <el-button type="primary" size="large" @click="router.push('/side-channel')">
-            开始分析
+          <el-button type="primary" size="large" @click="router.push('/unified-analysis')">
+            三维统一分析
             <el-icon class="el-icon--right"><ArrowRight /></el-icon>
           </el-button>
           <button class="text-action" type="button" @click="router.push('/motion')">查看动作序列模块</button>

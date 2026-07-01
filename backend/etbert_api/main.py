@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -49,6 +52,41 @@ def _service():
 
 RUN_DIR = Path(__file__).resolve().parents[2] / "data" / "etbert_runs"
 RUN_DIR.mkdir(parents=True, exist_ok=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _run_isolated(operation: str, model_key: str, input_path: Path, max_packets: int):
+    output_path = RUN_DIR / f"{input_path.stem}_{operation}.json"
+    cmd = [
+        sys.executable,
+        "-m",
+        "backend.etbert_api.worker",
+        operation,
+        model_key,
+        str(input_path),
+        str(max_packets),
+        str(output_path),
+    ]
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    proc = subprocess.run(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=600,
+        creationflags=creationflags,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()[-2000:]
+        raise RuntimeError(
+            f"ET-BERT worker exited with code {proc.returncode}"
+            + (f": {detail}" if detail else "")
+        )
+    if not output_path.exists():
+        raise RuntimeError("ET-BERT worker did not produce a result file")
+    return json.loads(output_path.read_text(encoding="utf-8"))
 
 app = FastAPI(title="ET-BERT Detection API", version="1.0.0")
 app.add_middleware(
@@ -122,7 +160,7 @@ async def _run_report(file: UploadFile, model_key: str, max_packets: int):
     input_path = RUN_DIR / f"{run_id}{suffix}"
     input_path.write_bytes(await file.read())
     try:
-        report = etbert.generate_report(model_key, str(input_path), max_packets)
+        report = _run_isolated("report", model_key, input_path, max_packets)
     except Exception as exc:
         logger.exception("ET-BERT report failed")
         raise HTTPException(500, f"报告生成失败: {exc}")
@@ -144,25 +182,25 @@ async def _run_detect(file: UploadFile, model_key: str, max_packets: int):
     input_path.write_bytes(await file.read())
 
     try:
-        result = _service().detect_pcap(model_key, str(input_path), max_packets)
+        result = _run_isolated("detect", model_key, input_path, max_packets)
     except Exception as exc:
         logger.exception("ET-BERT detect failed")
         raise HTTPException(500, f"检测失败: {exc}")
 
     # 低置信度告警
-    low_conf = [r for r in result.predictions if r["confidence"] < 50]
+    low_conf = [r for r in result["predictions"] if r["confidence"] < 50]
 
     return {
         "run_id": run_id,
         "model": model_key,
         "model_type": MODEL_DEFS[model_key]["type"],
-        "total_samples": result.total_samples,
-        "summary": result.summary,
-        "abnormal_ratio": result.abnormal_ratio,
+        "total_samples": result["total_samples"],
+        "summary": result["summary"],
+        "abnormal_ratio": result["abnormal_ratio"],
         "low_confidence_count": len(low_conf),
         "low_confidence_samples": low_conf[:10],
-        "proto_stats": result.proto_stats,
-        "predictions": result.predictions[:100],
+        "proto_stats": result["proto_stats"],
+        "predictions": result["predictions"][:100],
     }
 
 

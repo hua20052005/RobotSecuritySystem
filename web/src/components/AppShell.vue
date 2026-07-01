@@ -2,6 +2,7 @@
 import { useRoute } from 'vue-router'
 import {
   Clock,
+  Compass,
   Connection,
   Cpu,
   DataAnalysis,
@@ -21,6 +22,7 @@ defineProps({
 
 const route = useRoute()
 const analysisItems = [
+  { to: '/unified-analysis', label: '三维统一分析', icon: Compass },
   { to: '/side-channel', label: '侧信道分析', icon: DataAnalysis },
   { to: '/payload', label: '载荷检测', icon: Lock },
   { to: '/motion', label: '动作序列分析', icon: Connection },
