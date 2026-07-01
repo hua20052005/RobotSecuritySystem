@@ -4,7 +4,13 @@ import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
+import JsonViewer from '../components/JsonViewer.vue'
 import MetricCard from '../components/MetricCard.vue'
+import ModuleHero from '../components/ModuleHero.vue'
+import ResultSummary from '../components/ResultSummary.vue'
+import RiskBadge from '../components/RiskBadge.vue'
+import SectionBlock from '../components/SectionBlock.vue'
+import UploadPanel from '../components/UploadPanel.vue'
 
 const fileList = ref([])
 const selectedFile = ref(null)
@@ -13,6 +19,10 @@ const maxPackets = ref(500)
 const loading = ref(false)
 const reportLoading = ref(false)
 const result = ref(null)
+const activeTab = ref('overview')
+const errorMessage = ref('')
+const elapsedMs = ref(0)
+const resultRef = ref(null)
 
 // ── 图表 refs ─────
 const pieRef = ref(null)
@@ -77,12 +87,29 @@ const protoColors = { 'UDP': '#3b82f6', 'TCP': '#f97316', 'Other': '#9ca3af' }
 
 const onModelSwitch = () => {
   result.value = null
+  errorMessage.value = ''
 }
+
+const lowConfidenceRows = computed(() =>
+  (result.value?.predictions || []).filter((row) => Number(row.confidence || 0) < 50),
+)
+const topCategory = computed(() => {
+  const entries = Object.entries(result.value?.summary || {}).sort(([, a], [, b]) => b - a)
+  return entries[0]?.[0] || '-'
+})
+const resultStatus = computed(() => {
+  const ratio = Number(result.value?.abnormal_ratio || 0)
+  if (ratio > 20) return 'ANOMALY'
+  if (ratio > 5) return 'TOLERATED'
+  if (ratio > 0) return 'UNKNOWN'
+  return 'NORMAL'
+})
 
 // ── 执行检测 ─────
 const runDetection = async () => {
   if (!selectedFile.value) { ElMessage.warning('请先上传 .pcap 文件'); return }
-  loading.value = true; result.value = null; disposeCharts()
+  loading.value = true; result.value = null; errorMessage.value = ''; disposeCharts()
+  const startedAt = performance.now()
   const formData = new FormData()
   formData.append('file', selectedFile.value)
   formData.append('max_packets', maxPackets.value.toString())
@@ -95,11 +122,16 @@ const runDetection = async () => {
       timeout: 300000,
     })
     result.value = data
+    elapsedMs.value = Math.round(performance.now() - startedAt)
+    activeTab.value = 'overview'
+    await nextTick()
+    resultRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (error) {
     let msg = '检测失败'
     if (error.code === 'ECONNABORTED') msg = '请求超时：CPU 推理较慢，请降低最大包数或检查后端是否运行'
     else if (error.response?.data?.detail) msg = typeof error.response.data.detail === 'string' ? error.response.data.detail : JSON.stringify(error.response.data.detail)
     else if (error.message) msg = error.message
+    errorMessage.value = msg
     ElMessage.error(msg)
   } finally {
     loading.value = false
@@ -245,139 +277,154 @@ watch(result, async (val) => {
   renderAll()
 }, { flush: 'post' })
 
+watch(activeTab, async () => {
+  await nextTick()
+  renderAll()
+})
+
 const handleResize = () => Object.values(charts).forEach(c => c?.resize())
 onMounted(() => window.addEventListener('resize', handleResize))
 onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disposeCharts() })
 </script>
 
 <template>
-  <section class="panel fade-in">
-    <div class="section-header">
-      <div>
-        <h2 class="section-title">ET-BERT 双粒度流量检测</h2>
-        <p class="panel-sub">基于预训练 Transformer 的包级 + 流级深度异常检测</p>
-      </div>
-      <div class="pill-badge">ET-BERT</div>
-    </div>
-
-    <div class="grid-2" style="margin-top: 20px;">
-      <div>
-        <p class="panel-sub">流量文件</p>
-        <el-upload drag :auto-upload="false" :limit="1" :file-list="fileList"
-          :on-change="handleFileChange" :on-remove="handleRemove" accept=".pcap,.pcapng">
-          <div class="el-upload__text">拖拽 PCAP 到此，或点击选择</div>
-        </el-upload>
-      </div>
-      <div>
-        <p class="panel-sub">检测粒度</p>
-        <el-radio-group v-model="modelMode" @change="onModelSwitch" style="margin-bottom:12px">
-          <el-radio-button value="packet">包级 (单包)</el-radio-button>
-          <el-radio-button value="flow">流级 (32包窗口)</el-radio-button>
-        </el-radio-group>
-        <p class="panel-sub" style="margin-top:16px">最大处理包数</p>
-        <el-input-number v-model="maxPackets" :min="100" :step="500" :max="50000" />
-        <div class="action-row" style="margin-top:20px">
-          <el-button type="primary" :loading="loading" @click="runDetection">
-            {{ loading ? '检测中...' : '开始检测' }}
+  <ModuleHero
+    objective="识别控制载荷中的异常指令、参数与通信模式"
+    input="PCAP / PCAPNG 载荷流量"
+    output="异常类别、置信度与样本证据"
+    scenario="控制链路内容审计"
+  />
+  <SectionBlock
+    title="检测配置"
+    description="上传控制链路抓包，选择包级或流级推理方式后开始检测。"
+    class="fade-in"
+    v-loading="loading"
+  >
+    <div class="analysis-input-grid payload-config">
+      <UploadPanel
+        :file-list="fileList"
+        :selected-file="selectedFile"
+        :disabled="loading"
+        :error="errorMessage"
+        accept=".pcap,.pcapng"
+        @change="handleFileChange"
+        @remove="handleRemove"
+      />
+      <div class="control-stack">
+        <label class="control-field">
+          <span>检测粒度</span>
+          <el-radio-group v-model="modelMode" @change="onModelSwitch">
+            <el-radio-button value="packet">包级（单包）</el-radio-button>
+            <el-radio-button value="flow">流级（32 包窗口）</el-radio-button>
+          </el-radio-group>
+        </label>
+        <label class="control-field">
+          <span>最大处理包数</span>
+          <el-input-number v-model="maxPackets" :min="100" :step="500" :max="50000" />
+        </label>
+        <div class="config-note">
+          <strong>{{ modelMode === 'packet' ? '逐包识别异常载荷' : '按连续 32 包恢复流级上下文' }}</strong>
+          <span>模型切换不会改变原始抓包文件。</span>
+        </div>
+        <div class="action-row">
+          <el-button type="primary" size="large" :loading="loading" :disabled="!selectedFile || loading" @click="runDetection">
+            {{ loading ? '正在检测' : '开始检测' }}
           </el-button>
-          <el-button v-if="result" type="success" :loading="reportLoading" @click="downloadReport" style="margin-left:8px">
-            {{ reportLoading ? '生成中...' : '下载检测报告' }}
-          </el-button>
+          <el-button v-if="errorMessage" size="large" :disabled="!selectedFile" @click="runDetection">重试</el-button>
         </div>
       </div>
     </div>
-  </section>
+  </SectionBlock>
 
-  <!-- 指标卡 -->
-  <section v-if="result" class="panel fade-in">
-    <div class="section-header">
-      <h2 class="section-title">检测结果</h2>
-      <span class="pill-badge">{{ result.model }} · {{ result.model_type === 'packet' ? '包级' : '流级' }}</span>
-    </div>
-    <div class="grid-3" style="margin-top: 18px;">
-      <MetricCard title="检测样本数" :value="(result.total_samples || 0).toLocaleString()"
-        subtitle="packet: 包数 / flow: 窗口数" />
-      <MetricCard title="异常比例" :value="(result.abnormal_ratio || 0).toFixed(2) + '%'"
-        :subtitle="result.abnormal_ratio > 10 ? '⚠ 高异常率' : '✓ 正常范围'" />
-      <MetricCard title="低置信度告警" :value="(result.low_confidence_count || 0) + ' 条'"
-        subtitle="置信度 < 50%，可能为未知攻击" />
-    </div>
+  <div v-if="!result && !loading && !errorMessage" class="result-placeholder">
+    检测完成后将在此显示风险结论、关键指标和可追溯证据。
+  </div>
 
-    <!-- 检测摘要 -->
-    <div class="summary-card" :style="{ borderLeftColor: summaryText.levelColor }">
-      <div class="summary-header">
-        <span class="summary-level" :style="{ background: summaryText.levelColor }">
-          {{ summaryText.level }}
-        </span>
-        <span class="summary-title">{{ summaryText.modelLabel }}检测报告</span>
-      </div>
-      <p class="summary-body">
-        本次{{ summaryText.modelLabel }}检测共处理 <b>{{ summaryText.total.toLocaleString() }}</b> 个{{ summaryText.modelLabel === '包级' ? '包' : '流窗口' }}，
-        其中正常 <b>{{ summaryText.normal.toLocaleString() }}</b> 个{{ summaryText.modelLabel === '包级' ? '包' : '流窗口' }}，
-        检出异常 <b>{{ summaryText.abnormal.toLocaleString() }}</b> 个{{ summaryText.modelLabel === '包级' ? '包' : '流窗口' }}，
-        异常占比 <b>{{ summaryText.abnormalRatio.toFixed(2) }}%</b>。
-        <template v-if="summaryText.abnormal > 0">
-          主要异常类型：{{ summaryText.topList }}。
+  <template v-if="result">
+    <div ref="resultRef">
+      <ResultSummary
+        :status="resultStatus"
+        :title="`${summaryText.modelLabel}检测完成：${summaryText.level}`"
+        :description="summaryText.advice"
+        :advice="summaryText.abnormal > 0 ? '查看异常类别和低置信度样本，必要时导出报告复核。' : '保留检测记录并持续监控该控制链路。'"
+        :task-id="result.run_id"
+        :duration="`${(elapsedMs / 1000).toFixed(2)} s`"
+      >
+        <template #actions>
+          <el-button :loading="reportLoading" @click="downloadReport">{{ reportLoading ? '生成中' : '导出报告' }}</el-button>
         </template>
-        低置信度告警 {{ summaryText.lowConf }} 条。
-        {{ summaryText.advice }}
-      </p>
+      </ResultSummary>
     </div>
-  </section>
 
-  <!-- 图表区 1: 检测结果图表 -->
-  <section v-if="result" class="grid-3 fade-in">
-    <div class="chart-card"><div class="chart-title">类别分布</div><div ref="pieRef" class="chart-box" style="height:260px"></div></div>
-    <div class="chart-card"><div class="chart-title">类别计数</div><div ref="barRef" class="chart-box" style="height:260px"></div></div>
-    <div class="chart-card"><div class="chart-title">置信度分布</div><div ref="confRef" class="chart-box" style="height:260px"></div></div>
-  </section>
-
-  <!-- 图表区 2: 协议与通信统计 -->
-  <section v-if="result && result.proto_stats" class="grid-3 fade-in">
-    <div class="chart-card"><div class="chart-title">协议分布</div><div ref="protoRef" class="chart-box" style="height:240px"></div></div>
-    <div class="chart-card"><div class="chart-title">包大小分布</div><div ref="sizeRef" class="chart-box" style="height:240px"></div></div>
-    <div class="chart-card"><div class="chart-title">Top-5 端口</div><div ref="portRef" class="chart-box" style="height:240px"></div></div>
-  </section>
-
-  <!-- 明细表 -->
-  <section v-if="result && result.predictions.length" class="panel fade-in">
-    <div class="section-header">
-      <h2 class="section-title">检测明细（前 100 条）</h2>
+    <div class="grid-4 metric-grid fade-in">
+      <MetricCard title="检测样本" :value="(result.total_samples || 0).toLocaleString()" subtitle="本次进入模型的样本数" />
+      <MetricCard title="异常比例" :value="`${(result.abnormal_ratio || 0).toFixed(2)}%`" subtitle="异常样本占全部样本比例" />
+      <MetricCard title="主要类别" :value="topCategory" subtitle="当前数量最多的预测类别" />
+      <MetricCard title="低置信度" :value="`${result.low_confidence_count || 0}`" subtitle="置信度低于 50% 的样本" />
     </div>
-    <div class="data-table" style="margin-top:16px">
-      <el-table :data="result.predictions" height="400" stripe>
-        <el-table-column type="index" label="序号" width="60" />
-        <el-table-column prop="pred_name" label="判定类别" min-width="120">
-          <template #default="{ row }">
-            <el-tag :color="threatColor(row.pred_name)" effect="dark" size="small" style="border:none;color:#fff">
-              {{ row.pred_name }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="confidence" label="置信度" min-width="100">
-          <template #default="{ row }">
-            <span :style="{ color: row.confidence < 50 ? '#ef4444' : row.confidence > 90 ? '#22c55e' : '#f59e0b', fontWeight: 'bold' }">
-              {{ row.confidence.toFixed(1) }}%
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Top-3 概率" min-width="300">
-          <template #default="{ row }">
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <span v-for="(prob, clsName) in Object.fromEntries(
-                Object.entries(row.all_probs || {}).sort((a,b) => b[1]-a[1]).slice(0,3)
-              )" :key="clsName"
-                style="font-size:11px;background:#f3f4f6;padding:1px 6px;border-radius:4px">
-                {{ clsName }}: <b>{{ prob.toFixed(1) }}%</b>
-              </span>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-  </section>
 
-  <section v-else-if="!result && !loading" class="empty-state fade-in">
-    上传 PCAP 文件并选择检测粒度，开始 ET-BERT 双粒度推理。
-  </section>
+    <SectionBlock title="检测证据" description="在概览、类别分布、样本明细和原始数据之间切换。" class="fade-in">
+      <el-tabs v-model="activeTab" class="audit-tabs">
+        <el-tab-pane label="检测概览" name="overview">
+          <div class="audit-conclusion">
+            <RiskBadge :status="resultStatus" :label="summaryText.level" />
+            <p>
+              共处理 <b>{{ summaryText.total.toLocaleString() }}</b> 个样本，正常
+              <b>{{ summaryText.normal.toLocaleString() }}</b> 个，异常
+              <b>{{ summaryText.abnormal.toLocaleString() }}</b> 个。
+              <template v-if="summaryText.topList">主要异常：{{ summaryText.topList }}。</template>
+            </p>
+          </div>
+          <div v-if="result.proto_stats" class="grid-3 chart-grid">
+            <div><div class="chart-title">协议分布</div><div ref="protoRef" class="chart-box"></div></div>
+            <div><div class="chart-title">包大小分布</div><div ref="sizeRef" class="chart-box"></div></div>
+            <div><div class="chart-title">Top-5 端口</div><div ref="portRef" class="chart-box"></div></div>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="类别分布" name="distribution">
+          <div class="grid-3 chart-grid">
+            <div><div class="chart-title">类别占比</div><div ref="pieRef" class="chart-box"></div></div>
+            <div><div class="chart-title">类别计数</div><div ref="barRef" class="chart-box"></div></div>
+            <div><div class="chart-title">置信度分布</div><div ref="confRef" class="chart-box"></div></div>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="前 100 条明细" name="details">
+          <div class="data-table">
+            <el-table :data="(result.predictions || []).slice(0, 100)" height="430" stripe empty-text="没有样本明细">
+              <el-table-column type="index" label="序号" width="70" />
+              <el-table-column prop="pred_name" label="判定类别" min-width="150">
+                <template #default="{ row }"><el-tag :color="threatColor(row.pred_name)" effect="dark">{{ row.pred_name }}</el-tag></template>
+              </el-table-column>
+              <el-table-column prop="confidence" label="置信度" width="120">
+                <template #default="{ row }"><RiskBadge :status="row.confidence < 50 ? 'UNKNOWN' : 'NORMAL'" :label="`${row.confidence.toFixed(1)}%`" /></template>
+              </el-table-column>
+              <el-table-column label="Top-3 概率" min-width="320">
+                <template #default="{ row }">
+                  {{ Object.entries(row.all_probs || {}).sort((a,b) => b[1]-a[1]).slice(0,3).map(([name, value]) => `${name} ${value.toFixed(1)}%`).join(' · ') }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane :label="`低置信度样本 (${lowConfidenceRows.length})`" name="low-confidence">
+          <div class="data-table">
+            <el-table :data="lowConfidenceRows" height="380" stripe empty-text="没有低置信度样本">
+              <el-table-column type="index" label="序号" width="70" />
+              <el-table-column prop="pred_name" label="预测类别" min-width="180" />
+              <el-table-column label="置信度" width="140">
+                <template #default="{ row }"><RiskBadge status="UNKNOWN" :label="`${row.confidence.toFixed(1)}%`" /></template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="JSON 结果" name="json">
+          <JsonViewer :data="result" :filename="`${result.run_id || 'etbert'}_result.json`" />
+        </el-tab-pane>
+      </el-tabs>
+    </SectionBlock>
+  </template>
 </template>

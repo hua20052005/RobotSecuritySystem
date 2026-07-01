@@ -2,7 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 
 import api from '../api/client'
+import JsonViewer from '../components/JsonViewer.vue'
 import MarkdownReport from '../components/MarkdownReport.vue'
+import RiskBadge from '../components/RiskBadge.vue'
+import SectionBlock from '../components/SectionBlock.vue'
 import { downloadJson } from '../lib/download'
 import { formatTime } from '../lib/format'
 
@@ -56,6 +59,12 @@ const riskLevel = (task) => {
   if (ratio >= 0.05 || Number(s.abnormal || 0) > 0) return '待确认'
   return '正常'
 }
+const riskStatus = (task) => {
+  const level = riskLevel(task)
+  if (level === '高风险') return 'ANOMALY'
+  if (level === '待确认') return 'UNKNOWN'
+  return 'NORMAL'
+}
 
 const taskMetricText = (task) => {
   const s = task.summary || {}
@@ -99,7 +108,7 @@ onMounted(loadTasks)
 </script>
 
 <template>
-  <section class="panel fade-in">
+  <SectionBlock title="历史审计任务" description="按模块、日期和关键词检索任务，点击任意记录打开证据详情。" class="fade-in">
     <div class="history-toolbar">
       <el-tabs v-model="moduleFilter" class="history-tabs">
         <el-tab-pane label="全部" name="" />
@@ -126,16 +135,20 @@ onMounted(loadTasks)
         :key="task.id"
         class="history-row"
         :class="{ danger: riskLevel(task) === '高风险' }"
+        role="button"
+        tabindex="0"
+        @click="openTask(task)"
+        @keydown.enter="openTask(task)"
       >
         <span class="module-chip" :class="task.module">{{ moduleName[task.module] || task.module }}</span>
         <div class="history-main">
           <strong>{{ task.title }}</strong>
           <span>{{ formatTime(task.created_at) }} · {{ taskMetricText(task) }}</span>
         </div>
-        <span class="risk-badge" :class="riskLevel(task)">{{ riskLevel(task) }}</span>
+        <RiskBadge :status="riskStatus(task)" :label="riskLevel(task)" />
         <div class="history-actions">
-          <el-button size="small" @click="openTask(task)">查看详情</el-button>
-          <el-button size="small" @click="exportJson(task)">导出</el-button>
+          <el-button size="small" @click.stop="openTask(task)">查看详情</el-button>
+          <el-button size="small" @click.stop="exportJson(task)">导出</el-button>
         </div>
       </div>
       <div v-if="!pageTasks.length" class="empty-state">暂无符合条件的任务记录</div>
@@ -150,19 +163,17 @@ onMounted(loadTasks)
         :total="filteredTasks.length"
       />
     </div>
-  </section>
+  </SectionBlock>
 
-  <el-dialog v-model="detailVisible" title="任务详情" width="860px">
+  <el-drawer v-model="detailVisible" title="任务证据详情" size="min(760px, 94vw)">
     <template v-if="selected">
       <div class="task-detail-grid">
         <div><strong>任务编号</strong><span>{{ selected.id }}</span></div>
         <div><strong>模块</strong><span>{{ moduleName[selected.module] || selected.module }}</span></div>
         <div><strong>创建时间</strong><span>{{ formatTime(selected.created_at) }}</span></div>
       </div>
-      <h3 class="detail-title">摘要</h3>
-      <pre class="json-preview">{{ JSON.stringify(selected.summary, null, 2) }}</pre>
-      <h3 class="detail-title">完整结果</h3>
-      <pre class="json-preview">{{ JSON.stringify(selected.result, null, 2) }}</pre>
+      <JsonViewer :data="selected.summary || {}" :filename="`${selected.id}_summary.json`" title="任务摘要" />
+      <JsonViewer :data="selected.result || {}" :filename="`${selected.id}_result.json`" title="完整结果" />
       <h3 class="detail-title">AI 报告</h3>
       <MarkdownReport v-if="selected.ai_report" :content="selected.ai_report" />
       <div v-else class="empty-state">该任务还没有生成 AI 报告</div>
@@ -171,5 +182,5 @@ onMounted(loadTasks)
       <el-button @click="detailVisible = false">关闭</el-button>
       <el-button v-if="selected" type="primary" @click="exportJson(selected)">导出任务 JSON</el-button>
     </template>
-  </el-dialog>
+  </el-drawer>
 </template>

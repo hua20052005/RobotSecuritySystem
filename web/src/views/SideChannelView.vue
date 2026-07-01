@@ -2,8 +2,14 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import api from '../api/client'
+import JsonViewer from '../components/JsonViewer.vue'
 import MarkdownReport from '../components/MarkdownReport.vue'
 import MetricCard from '../components/MetricCard.vue'
+import ModuleHero from '../components/ModuleHero.vue'
+import ResultSummary from '../components/ResultSummary.vue'
+import RiskBadge from '../components/RiskBadge.vue'
+import SectionBlock from '../components/SectionBlock.vue'
+import UploadPanel from '../components/UploadPanel.vue'
 import { downloadText } from '../lib/download'
 import { errorText } from '../lib/http-error'
 import { useSingleUpload } from '../composables/useSingleUpload'
@@ -20,6 +26,10 @@ const result = ref(null)
 const reportLoading = ref(false)
 const aiReport = ref('')
 const reportDialogVisible = ref(false)
+const activeTab = ref('overview')
+const errorMessage = ref('')
+const elapsedMs = ref(0)
+const resultRef = ref(null)
 
 const summary = computed(() => result.value?.summary || { total: 0, abnormal: 0, ratio: 0, avg_score: 0 })
 const anomalyTable = computed(() => result.value?.anomalies || { columns: [], rows: [], total: 0, limit: 0 })
@@ -44,6 +54,25 @@ const judgeSummary = computed(() => judgeResult.value?.summary || null)
 const judgeMeta = computed(() => judgeResult.value?.llm || null)
 const judgeGroups = computed(() => judgeResult.value?.groups || [])
 const verdictSourceLabel = { rule: '规则', llm: 'AI', default: '待复核' }
+const abnormalConnections = computed(() => {
+  if (judgeSummary.value?.total_groups != null) return Number(judgeSummary.value.total_groups)
+  const keys = new Set((anomalyTable.value.rows || []).map((row) => `${row.src || ''}->${row.dst || ''}`))
+  return keys.size
+})
+const auditStatus = computed(() => {
+  if (judgeResult.value?.overall_risk) return 'ANOMALY'
+  const ratio = Number(summary.value.ratio || 0)
+  if (ratio >= 0.15) return 'ANOMALY'
+  if (ratio >= 0.05) return 'TOLERATED'
+  if (ratio > 0) return 'UNKNOWN'
+  return 'NORMAL'
+})
+const auditStatusText = computed(() => ({
+  NORMAL: '未发现明显风险',
+  TOLERATED: '存在可容忍离群行为',
+  UNKNOWN: '发现少量未知离群行为',
+  ANOMALY: '发现高风险通信迹象',
+})[auditStatus.value])
 
 const featureOrder = ['dst_ip_num', 'port', 'size', 'entropy', 'src_ip_num', 'interval']
 const featureLabelMap = {
@@ -257,8 +286,10 @@ const runAnalysis = async () => {
 
   loading.value = true
   result.value = null
+  errorMessage.value = ''
   aiReport.value = ''
   judgeResult.value = null
+  const startedAt = performance.now()
 
   const formData = new FormData()
   formData.append('file', selectedFile.value)
@@ -272,10 +303,14 @@ const runAnalysis = async () => {
       timeout: 600000, // 大 pcap 解析 + 建模可能需要数分钟
     })
     result.value = data
+    elapsedMs.value = Math.round(performance.now() - startedAt)
+    activeTab.value = 'overview'
     await nextTick()
     renderCharts()
+    resultRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   } catch (error) {
-    ElMessage.error(errorText(error, '侧信道分析失败，请检查后端日志。'))
+    errorMessage.value = errorText(error, '侧信道分析失败，请检查后端日志。')
+    ElMessage.error(errorMessage.value)
   } finally {
     loading.value = false
   }
@@ -334,9 +369,20 @@ watch(result, async () => {
   await nextTick()
   renderCharts()
 })
+
+watch(activeTab, async () => {
+  await nextTick()
+  renderCharts()
+})
 </script>
 
 <template>
+  <ModuleHero
+    objective="从包长、方向、间隔和连接画像中发现离群通信"
+    input="PCAP / PCAPNG 元数据"
+    output="异常包、异常连接与二次审计结论"
+    scenario="非侵入式控制链路流量审计"
+  />
   <section
     class="panel fade-in"
     v-loading.fullscreen.lock="loading"
@@ -352,19 +398,15 @@ watch(result, async () => {
     </div>
 
     <div class="analysis-input-grid">
-      <div class="upload-zone">
-        <el-upload
-          drag
-          :auto-upload="false"
-          :limit="1"
-          :file-list="fileList"
-          :on-change="handleFileChange"
-          :on-remove="handleRemove"
-          accept=".pcap,.pcapng"
-        >
-          <div class="el-upload__text">拖入流量文件，或点击选择</div>
-        </el-upload>
-      </div>
+      <UploadPanel
+        :file-list="fileList"
+        :selected-file="selectedFile"
+        :disabled="loading"
+        :error="errorMessage"
+        accept=".pcap,.pcapng"
+        @change="handleFileChange"
+        @remove="handleRemove"
+      />
 
       <div class="control-stack">
         <label class="control-field">
@@ -387,33 +429,44 @@ watch(result, async () => {
         </label>
 
         <div class="action-row">
-          <el-button type="primary" :loading="loading" @click="runAnalysis">运行分析</el-button>
+          <el-button type="primary" size="large" :loading="loading" :disabled="!selectedFile || loading" @click="runAnalysis">运行分析</el-button>
+          <el-button v-if="errorMessage" size="large" :disabled="!selectedFile" @click="runAnalysis">重试</el-button>
           <span class="pill-badge">最多展示 5000 个散点</span>
         </div>
       </div>
     </div>
   </section>
 
-  <section v-if="result" class="panel fade-in">
-    <div class="section-header">
-      <div>
-        <h2 class="section-title">检测概览</h2>
-        <p class="panel-sub">模型在当前文件内部寻找离群通信行为，分数越低越可疑。</p>
-      </div>
-      <div class="action-row">
-        <span v-if="result.scatter?.sampled" class="pill-badge">已抽样绘图</span>
-        <el-button :loading="reportLoading" @click="generateReport">生成报告</el-button>
-      </div>
-    </div>
-    <div class="metric-strip">
+  <section v-if="result" ref="resultRef" class="side-result-summary fade-in">
+    <ResultSummary
+      :status="auditStatus"
+      :title="`审计结论：${auditStatusText}`"
+      :description="judgeResult?.assessment || `IsolationForest 在当前文件中标记了 ${summary.abnormal || 0} 个离群数据包。`"
+      :advice="auditStatus === 'ANOMALY' ? '查看异常包证据并运行二次判断，确认风险连接来源。' : '继续查看 IP 与端口画像，保留本次审计记录。'"
+      :task-id="result.run_id"
+      :duration="`${(elapsedMs / 1000).toFixed(2)} s`"
+    >
+      <template #actions><el-button :loading="reportLoading" @click="generateReport">生成报告</el-button></template>
+    </ResultSummary>
+    <div class="grid-4 metric-grid">
       <MetricCard title="总包数" :value="summary.total.toLocaleString()" subtitle="参与侧信道建模的 IP 包" />
-      <MetricCard title="异常包" :value="summary.abnormal.toLocaleString()" subtitle="IsolationForest 标记为异常" />
-      <MetricCard title="异常比例" :value="(summary.ratio * 100).toFixed(2) + '%'" subtitle="当前文件内的离群占比" />
-      <MetricCard title="平均分数" :value="Number(summary.avg_score || 0).toFixed(4)" subtitle="decision_function 均值" />
+      <MetricCard title="可疑包数" :value="summary.abnormal.toLocaleString()" subtitle="模型标记的离群数据包" />
+      <MetricCard title="异常连接" :value="String(abnormalConnections)" subtitle="涉及异常候选的通信分组" />
+      <MetricCard title="风险等级" :value="auditStatusText" subtitle="结合离群比例与二次判断" />
     </div>
   </section>
 
-  <section v-if="result" class="analysis-grid fade-in">
+  <SectionBlock v-if="result" title="审计链路" description="沿元数据、连接画像、异常证据和二次判断逐步复核。" class="fade-in">
+    <el-tabs v-model="activeTab" class="audit-tabs">
+      <el-tab-pane label="风险概览" name="overview" />
+      <el-tab-pane :label="`IP / 端口 (${ipProfilesTable.total || 0}/${portProfilesTable.total || 0})`" name="profiles" />
+      <el-tab-pane :label="`异常包证据 (${anomalyTable.total || 0})`" name="evidence" />
+      <el-tab-pane label="二次判断" name="judgement" />
+      <el-tab-pane label="JSON 结果" name="json" />
+    </el-tabs>
+  </SectionBlock>
+
+  <section v-if="result && activeTab === 'overview'" class="analysis-grid fade-in">
     <div class="chart-card">
       <div class="chart-title">特征空间</div>
       <div ref="scatterRef" class="chart-box"></div>
@@ -424,7 +477,8 @@ watch(result, async () => {
     </div>
   </section>
 
-  <section v-if="result" class="panel fade-in">
+  <template v-if="result && activeTab === 'profiles'">
+  <section class="panel fade-in">
     <div class="section-header">
       <div>
         <h2 class="section-title">IP统计</h2>
@@ -451,7 +505,7 @@ watch(result, async () => {
     </div>
   </section>
 
-  <section v-if="result" class="panel fade-in">
+  <section class="panel fade-in">
     <div class="section-header">
       <h2 class="section-title">端口统计</h2>
       <span class="pill-badge">按出现次数排序</span>
@@ -469,8 +523,9 @@ watch(result, async () => {
       </el-table>
     </div>
   </section>
+  </template>
 
-  <section v-if="result" class="panel fade-in">
+  <section v-if="result && activeTab === 'evidence'" class="panel fade-in">
     <div class="section-header">
       <div>
         <h2 class="section-title">异常包明细</h2>
@@ -485,7 +540,10 @@ watch(result, async () => {
     </div>
 
     <div class="data-table mt-16">
-      <el-table :data="anomalyTable.rows || []" max-height="360" stripe>
+        <el-table :data="anomalyTable.rows || []" max-height="420" stripe empty-text="未发现异常包证据">
+          <el-table-column label="风险" width="96" fixed="left">
+            <template #default><RiskBadge status="ANOMALY" label="可疑" /></template>
+          </el-table-column>
         <el-table-column
           v-for="col in anomalyTable.columns || []"
           :key="col"
@@ -498,7 +556,7 @@ watch(result, async () => {
     </div>
   </section>
 
-  <section v-if="result && judgeResult" class="panel fade-in">
+  <section v-if="result && activeTab === 'judgement'" class="panel fade-in">
     <div class="section-header">
       <div>
         <h2 class="section-title">二次判断结果</h2>
@@ -509,7 +567,7 @@ watch(result, async () => {
       </div>
     </div>
 
-    <div class="judge-summary-card">
+    <div v-if="judgeResult" class="judge-summary-card">
       <span class="judge-summary-flag" :class="judgeResult.overall_risk ? 'danger' : 'success'">
         {{ judgeResult.overall_risk ? '发现真风险' : '未发现明确风险' }}
       </span>
@@ -524,7 +582,7 @@ watch(result, async () => {
       </div>
     </div>
 
-    <div class="data-table mt-16">
+    <div v-if="judgeResult" class="data-table mt-16">
       <el-table :data="judgeGroups" max-height="360" stripe :default-sort="{ prop: 'is_risk', order: 'descending' }">
         <el-table-column label="判定" min-width="90" fixed="left">
           <template #default="{ row }">
@@ -549,9 +607,12 @@ watch(result, async () => {
         <el-table-column prop="confidence" label="置信度" min-width="90" sortable />
       </el-table>
     </div>
+    <div v-else class="empty-state">
+      先在“异常包证据”中运行二次判断，这里将展示规则与 AI 的分组审计结论。
+    </div>
   </section>
 
-  <section v-if="result && targetHitsTable.rows.length" class="panel fade-in">
+  <section v-if="result && targetHitsTable.rows.length && activeTab === 'profiles'" class="panel fade-in">
     <div class="section-header">
       <h2 class="section-title">目标 IP 命中</h2>
       <span class="pill-badge">{{ targetHitsTable.total }} 条</span>
@@ -568,6 +629,10 @@ watch(result, async () => {
         />
       </el-table>
     </div>
+  </section>
+
+  <section v-if="result && activeTab === 'json'" class="panel fade-in">
+    <JsonViewer :data="{ result, second_pass_judgement: judgeResult }" :filename="`${result.run_id || 'side_channel'}_result.json`" />
   </section>
 
   <section v-else-if="!result" class="empty-state fade-in">

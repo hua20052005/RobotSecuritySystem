@@ -21,6 +21,8 @@ const modules = [
     icon: DataAnalysis,
     tone: 'cyan',
     index: '01',
+    input: 'PCAP 元数据',
+    output: '异常连接与可疑包',
   },
   {
     title: '通信载荷检测',
@@ -29,6 +31,8 @@ const modules = [
     icon: Lock,
     tone: 'coral',
     index: '02',
+    input: 'PCAP 载荷',
+    output: '异常类别与置信度',
   },
   {
     title: '动作序列分析',
@@ -37,7 +41,18 @@ const modules = [
     icon: Connection,
     tone: 'green',
     index: '03',
+    input: '控制链路 PCAP',
+    output: '动作时间线与流程结论',
   },
+]
+
+const pipeline = ['PCAP 上传', '侧信道分析', '载荷检测', '动作序列识别', 'PAPB 流程校验', '审计报告']
+const capabilities = [
+  '非侵入式流量审计',
+  '双粒度载荷检测',
+  '动作序列恢复',
+  '流程异常告警',
+  '历史追溯与证据导出',
 ]
 </script>
 
@@ -96,9 +111,28 @@ const modules = [
           <span class="module-icon"><el-icon><component :is="item.icon" /></el-icon></span>
           <strong>{{ item.title }}</strong>
           <small>{{ item.description }}</small>
+          <span class="module-io"><b>输入</b>{{ item.input }}<i></i><b>输出</b>{{ item.output }}</span>
           <span class="module-enter">进入模块 <el-icon><ArrowRight /></el-icon></span>
         </button>
       </div>
+    </section>
+
+    <section class="pipeline-section">
+      <div class="module-heading">
+        <div><span>系统检测链路</span><h2>一份抓包，形成完整审计证据</h2></div>
+        <p>各模块既可以独立运行，也可以沿统一链路逐步收敛到动作与流程结论。</p>
+      </div>
+      <div class="pipeline-track">
+        <template v-for="(step, index) in pipeline" :key="step">
+          <div class="pipeline-step"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ step }}</strong></div>
+          <ArrowRight v-if="index < pipeline.length - 1" class="pipeline-arrow" />
+        </template>
+      </div>
+    </section>
+
+    <section class="capability-section">
+      <div><span>平台能力</span><h2>围绕机器人控制链路构建</h2></div>
+      <ul><li v-for="item in capabilities" :key="item">{{ item }}</li></ul>
     </section>
   </main>
 </template>
@@ -306,7 +340,7 @@ const modules = [
 .module-card {
   position: relative;
   display: grid;
-  min-height: 245px;
+  min-height: 290px;
   padding: 24px;
   overflow: hidden;
   border: 1px solid #dfe6eb;
@@ -370,6 +404,28 @@ const modules = [
   line-height: 1.6;
 }
 
+.module-io {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 15px;
+  color: #6b7783;
+  font-size: 11px;
+}
+
+.module-io b {
+  color: #33404c;
+  font-weight: 750;
+}
+
+.module-io i {
+  width: 1px;
+  height: 11px;
+  margin: 0 3px;
+  background: #dce3e7;
+}
+
 .module-enter {
   display: inline-flex;
   align-items: center;
@@ -378,6 +434,84 @@ const modules = [
   color: #2f6fed;
   font-size: 12px;
   font-weight: 750;
+}
+
+.pipeline-section,
+.capability-section {
+  max-width: 1260px;
+  margin: 64px auto 0;
+}
+
+.pipeline-track {
+  display: grid;
+  grid-template-columns: repeat(11, auto);
+  align-items: center;
+  padding: 24px 26px;
+  border-top: 1px solid #dce3e7;
+  border-bottom: 1px solid #dce3e7;
+}
+
+.pipeline-step {
+  display: grid;
+  gap: 5px;
+}
+
+.pipeline-step span {
+  color: #83909b;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.pipeline-step strong {
+  color: #25313c;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pipeline-arrow {
+  width: 17px;
+  margin: 0 14px;
+  color: #a5b0b8;
+}
+
+.capability-section {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding-top: 38px;
+  border-top: 1px solid #dce3e7;
+}
+
+.capability-section span {
+  color: #345d9d;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.capability-section h2 {
+  margin: 8px 0 0;
+  font-size: 25px;
+}
+
+.capability-section ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 690px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capability-section li {
+  padding: 7px 10px;
+  border: 1px solid #dce3e7;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.56);
+  color: #53616e;
+  font-size: 12px;
 }
 
 @media (max-width: 900px) {
@@ -404,6 +538,25 @@ const modules = [
   .module-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .pipeline-track {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .pipeline-arrow {
+    margin: 0 0 0 12px;
+    transform: rotate(90deg);
+  }
+
+  .capability-section {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .capability-section ul {
+    justify-content: flex-start;
   }
 }
 

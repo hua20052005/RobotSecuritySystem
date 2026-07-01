@@ -1,0 +1,52 @@
+:root {
+  --bg: #edf1f3;
+  --surface: #ffffff;
+  --surface-2: #f7f9fa;
+  --surface-3: #f1f4f6;
+  --line: #dce3e7;
+  --line-soft: #e9eef1;
+  --ink: #17202b;
+  --ink-2: #43505d;
+  --muted: #74808b;
+  --sidebar: #ffffff;
+  --sidebar-2: #f5f7f8;
+  --accent: #345d9d;
+  --accent-strong: #294b7f;
+  --accent-2: #178b89;
+  --accent-soft: #edf3fa;
+  --coral: #d86a4d;
+  --coral-soft: #fff1ec;
+  --normal: #238557;
+  --normal-soft: #eef8f2;
+  --tolerated: #c56a22;
+  --tolerated-soft: #fff5eb;
+  --unknown: #aa7a16;
+  --unknown-soft: #fff9e8;
+  --danger: #c6454f;
+  --danger-soft: #fff1f2;
+  --warning: #b76e16;
+  --ok: #238557;
+  --running: #345d9d;
+  --pending: #7d8791;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: none;
+  --shadow-soft: 0 12px 32px rgba(35, 49, 60, 0.08);
+  --shadow-card: 0 1px 2px rgba(35, 49, 60, 0.03), 0 8px 24px rgba(35, 49, 60, 0.045);
+
+  --el-color-primary: #345d9d;
+  --el-color-primary-light-3: #708cb7;
+  --el-color-primary-light-5: #9aaecb;
+  --el-color-primary-light-7: #c4d0df;
+  --el-color-primary-light-8: #d9e1eb;
+  --el-color-primary-light-9: #edf3fa;
+  --el-color-primary-dark-2: #294b7f;
+  --el-border-radius-base: 6px;
+
+  font-family: Inter, 'Geist', 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}

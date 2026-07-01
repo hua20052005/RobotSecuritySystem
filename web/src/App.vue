@@ -2,18 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, provide, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import {
-  Clock,
-  Connection,
-  Cpu,
-  DataAnalysis,
-  DocumentChecked,
-  HomeFilled,
-  Lock,
-  User,
-} from '@element-plus/icons-vue'
 
 import api from './api/client'
+import AppShell from './components/AppShell.vue'
 import { errorText } from './lib/http-error'
 
 const route = useRoute()
@@ -32,15 +23,6 @@ const authForm = reactive({
   confirm_password: '',
   remember: true,
 })
-
-const navItems = [
-  { to: '/', label: '系统总览', icon: HomeFilled },
-  { to: '/side-channel', label: '侧信道分析', icon: DataAnalysis },
-  { to: '/payload', label: '载荷检测', icon: Lock },
-  { to: '/motion', label: '动作序列分析', icon: Connection },
-  { to: '/history', label: '审计历史', icon: Clock },
-  { to: '/profile', label: '账户设置', icon: User },
-]
 
 provide('auth', auth)
 provide('openAuth', (mode = 'login') => {
@@ -151,45 +133,14 @@ onBeforeUnmount(() => {
   <el-config-provider :locale="zhCn">
   <RouterView v-if="isEntry" />
 
-  <div v-else class="workbench-shell">
-    <aside class="console-sidebar">
-      <RouterLink class="sidebar-brand" to="/">
-        <span class="brand-mark"><el-icon><Cpu /></el-icon></span>
-        <span>
-          <strong>RobotSec</strong>
-          <small>机器人安全审计</small>
-        </span>
-      </RouterLink>
-
-      <span class="sidebar-label">分析工作台</span>
-      <nav class="sidebar-nav">
-        <RouterLink v-for="item in navItems" :key="item.to" :to="item.to">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </RouterLink>
-      </nav>
-
-      <div class="sidebar-foot">
-        <DocumentChecked />
-        <span>
-          <strong>本地审计模式</strong>
-          <small>证据仅保存在当前设备</small>
-        </span>
-      </div>
-    </aside>
-
-    <main class="workbench-main">
-      <div class="page-heading">
-        <div>
-          <span class="page-kicker">安全分析工作台</span>
-          <h1>{{ route.meta.title || '机器人网络安全审计' }}</h1>
-        </div>
-
-        <div class="page-actions">
-          <div class="sidebar-status" :class="`is-${serverStatus}`">
-            {{ statusText }} · <strong>{{ apiHost }}</strong>
-          </div>
-
+  <AppShell
+    v-else
+    :server-status="serverStatus"
+    :status-text="statusText"
+    :api-host="apiHost"
+  >
+    <template #account>
+      <div class="page-actions">
           <el-dropdown v-if="auth.user" trigger="click">
             <button class="account-button" type="button">
               <span class="avatar">{{ userInitial }}</span>
@@ -208,12 +159,10 @@ onBeforeUnmount(() => {
             <button type="button" class="text-login" @click="authMode = 'login'; authVisible = true">登录</button>
             <el-button type="primary" @click="authMode = 'register'; authVisible = true">注册</el-button>
           </div>
-        </div>
       </div>
-
-      <RouterView />
-    </main>
-  </div>
+    </template>
+    <RouterView />
+  </AppShell>
 
   <el-dialog v-model="authVisible" width="420px" class="auth-dialog" :show-close="false">
     <div class="auth-head">

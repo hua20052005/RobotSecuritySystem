@@ -1,8 +1,14 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 import api from '../api/client'
+import JsonViewer from '../components/JsonViewer.vue'
 import MetricCard from '../components/MetricCard.vue'
+import ModuleHero from '../components/ModuleHero.vue'
+import ResultSummary from '../components/ResultSummary.vue'
+import RiskBadge from '../components/RiskBadge.vue'
+import SectionBlock from '../components/SectionBlock.vue'
+import UploadPanel from '../components/UploadPanel.vue'
 import { downloadJson } from '../lib/download'
 import { errorText } from '../lib/http-error'
 import { useSingleUpload } from '../composables/useSingleUpload'
@@ -10,6 +16,10 @@ import { useSingleUpload } from '../composables/useSingleUpload'
 const { fileList, selectedFile, handleChange, handleRemove } = useSingleUpload()
 const loading = ref(false)
 const result = ref(null)
+const activeTab = ref('overview')
+const errorMessage = ref('')
+const elapsedMs = ref(0)
+const resultRef = ref(null)
 
 const method = ref('command')
 const minSegmentS = ref(0.25)
@@ -37,13 +47,6 @@ const violations = computed(() => flow.value?.violations || [])
 const transitions = computed(() => flow.value?.transition_check?.transitions || [])
 const candidates = computed(() => flow.value?.candidate_matches || [])
 const selectedFileName = computed(() => selectedFile.value?.name || '')
-const selectedFileSize = computed(() => {
-  const bytes = selectedFile.value?.size
-  if (!Number.isFinite(bytes)) return ''
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-})
-
 const segments = computed(() =>
   (result.value?.recognition?.actions || []).map((row, index) => {
     const start = Number(row.t_start_s ?? row.start_s ?? row.time_s ?? 0)
@@ -133,17 +136,36 @@ const evidenceRows = computed(() => {
   return rows
 })
 
-const mainReason = computed(() => evidenceRows.value[0]?.reason || statusMeta.value.explain)
-const rawJson = computed(() => (result.value ? JSON.stringify(result.value, null, 2) : ''))
+const templateSimilarity = computed(() => {
+  const ratio = Number(candidates.value[0]?.error_ratio)
+  return Number.isFinite(ratio) ? `${Math.max(0, (1 - ratio) * 100).toFixed(1)}%` : '-'
+})
 
+const timeline = computed(() =>
+  actions.value.map((action, index) => {
+    const segment = segments.value[index] || {}
+    const transition = index > 0 ? transitions.value[index - 1] : null
+    return {
+      action,
+      source: segment.sourceText || '动作序列',
+      time: segment.timeText || '-',
+      confidence: segment.confidenceText || '-',
+      decision: transition?.decision || 'NORMAL',
+    }
+  }),
+)
+
+const mainReason = computed(() => evidenceRows.value[0]?.reason || statusMeta.value.explain)
 const onFileChange = (file) => {
   handleChange(file)
   result.value = null
+  errorMessage.value = ''
 }
 
 const onFileRemove = () => {
   handleRemove()
   result.value = null
+  errorMessage.value = ''
 }
 
 const runRecognition = async () => {
@@ -154,6 +176,8 @@ const runRecognition = async () => {
 
   loading.value = true
   result.value = null
+  errorMessage.value = ''
+  const startedAt = performance.now()
 
   const formData = new FormData()
   formData.append('file', selectedFile.value)
@@ -171,6 +195,10 @@ const runRecognition = async () => {
       timeout: 600000,
     })
     result.value = data
+    elapsedMs.value = Math.round(performance.now() - startedAt)
+    activeTab.value = 'overview'
+    await nextTick()
+    resultRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     if (data.summary?.flow_status === 'ANOMALY') {
       ElMessage.error('识别完成：检测到动作流程异常')
     } else if (data.summary?.flow_status === 'UNKNOWN_VALIDITY') {
@@ -179,7 +207,8 @@ const runRecognition = async () => {
       ElMessage.success('动作序列识别与流程校验完成')
     }
   } catch (error) {
-    ElMessage.error(errorText(error, '动作序列识别失败，请检查后端服务、模型文件和上传的 pcap。'))
+    errorMessage.value = errorText(error, '动作序列识别失败，请检查后端服务、模型文件和上传的 pcap。')
+    ElMessage.error(errorMessage.value)
   } finally {
     loading.value = false
   }
@@ -192,6 +221,12 @@ const exportJson = () => {
 </script>
 
 <template>
+  <ModuleHero
+    objective="恢复控制动作并判断动作转移与任务流程是否合理"
+    input="机器狗控制链路 PCAP"
+    output="动作时间线、转移风险与流程结论"
+    scenario="自由操控、巡逻、交互与动作表演"
+  />
   <section
     class="panel motion-workbench fade-in"
     v-loading.fullscreen.lock="loading"
@@ -207,34 +242,14 @@ const exportJson = () => {
     </div>
 
     <div class="analysis-input-grid">
-      <div class="upload-zone">
-        <div class="field-heading">
-          <strong>抓包文件</strong>
-          <span>PCAP / PCAPNG / CAP</span>
-        </div>
-        <el-upload
-          drag
-          :auto-upload="false"
-          :limit="1"
-          :file-list="fileList"
-          :show-file-list="false"
-          :on-change="onFileChange"
-          :on-remove="onFileRemove"
-          accept=".pcap,.pcapng,.cap"
-        >
-          <div class="upload-symbol">↑</div>
-          <div class="el-upload__text">{{ selectedFile ? '点击可重新选择文件' : '拖拽文件到此处，或点击选择' }}</div>
-        </el-upload>
-
-        <div v-if="selectedFile" class="selected-file">
-          <div class="file-mark">PCAP</div>
-          <div class="file-copy">
-            <strong :title="selectedFileName">{{ selectedFileName }}</strong>
-            <span>{{ selectedFileSize }} · 已就绪</span>
-          </div>
-          <el-button text type="danger" aria-label="移除文件" @click.stop="onFileRemove">移除</el-button>
-        </div>
-      </div>
+      <UploadPanel
+        :file-list="fileList"
+        :selected-file="selectedFile"
+        :disabled="loading"
+        :error="errorMessage"
+        @change="onFileChange"
+        @remove="onFileRemove"
+      />
 
       <div class="control-stack">
         <label class="control-field">
@@ -283,45 +298,63 @@ const exportJson = () => {
         </div>
 
         <div class="action-row">
-          <el-button type="primary" size="large" :loading="loading" :disabled="!selectedFile" @click="runRecognition">
+          <el-button type="primary" size="large" :loading="loading" :disabled="!selectedFile || loading" @click="runRecognition">
             开始识别与分析
           </el-button>
-          <el-button size="large" :disabled="!result" @click="exportJson">导出结果</el-button>
+          <el-button v-if="errorMessage" size="large" :disabled="!selectedFile" @click="runRecognition">重试</el-button>
         </div>
       </div>
     </div>
   </section>
 
-  <section v-if="result" class="panel result-overview fade-in">
-    <div class="decision-row">
-      <div class="decision-status" :class="`is-${status.toLowerCase()}`">
-        <span>流程结论</span>
-        <strong>{{ statusMeta.text }}</strong>
-      </div>
-      <div class="decision-copy">
-        <strong>{{ mainReason }}</strong>
-        <span>文件：{{ selectedFileName }} · 任务编号：{{ result.run_id || '-' }}</span>
-      </div>
-    </div>
+  <section v-if="result" ref="resultRef" class="result-overview fade-in">
+    <ResultSummary
+      :status="status"
+      :title="`流程结论：${statusMeta.text}`"
+      :description="mainReason"
+      :advice="status === 'ANOMALY' ? '查看判定依据和逐步转移风险，复核高风险控制动作。' : status === 'UNKNOWN_VALIDITY' ? '将该序列提交人工审核，确认后再扩充正常模板。' : '保留本次记录并继续监控后续控制序列。'"
+      :task-id="result.run_id"
+      :duration="`${(elapsedMs / 1000).toFixed(2)} s`"
+    >
+      <template #actions><el-button @click="exportJson">导出 JSON</el-button></template>
+    </ResultSummary>
 
-    <div class="grid-3 mt-18">
+    <div class="grid-4 mt-18">
       <MetricCard title="识别动作" :value="String(actions.length)" subtitle="按时间排序的动作标签" />
       <MetricCard title="转移风险" :value="Number(flow?.transition_check?.max_risk || 0).toFixed(2)" subtitle="上下文中的最高异常风险" />
       <MetricCard title="判定依据" :value="String(evidenceRows.length)" subtitle="需要关注的规则与转移" />
+      <MetricCard title="模板相似度" :value="templateSimilarity" subtitle="与最接近正常模板的相似程度" />
     </div>
 
-    <div class="motion-sequence-path" aria-label="识别出的动作序列">
-      <template v-if="actions.length">
-        <template v-for="(action, index) in actions" :key="`${action}-${index}`">
-          <span class="sequence-node">{{ action }}</span>
-          <span v-if="index < actions.length - 1" class="sequence-arrow">→</span>
+    <div class="motion-timeline" aria-label="识别出的动作时间线">
+      <template v-if="timeline.length">
+        <template v-for="(item, index) in timeline" :key="`${item.action}-${index}`">
+          <div class="timeline-node" :class="{ 'is-risk': ['ANOMALY', 'DEVIATION'].includes(item.decision) }">
+            <strong>{{ item.action }}</strong>
+            <span>{{ item.time }} s</span>
+            <small>{{ item.source }} · 置信度 {{ item.confidence }}</small>
+          </div>
+          <span v-if="index < timeline.length - 1" class="sequence-arrow">→</span>
         </template>
       </template>
       <span v-else class="sequence-empty">未识别到动作</span>
     </div>
   </section>
 
-  <section v-if="result" class="grid-2 result-detail-grid fade-in">
+  <SectionBlock v-if="result" title="审计证据" description="按审计步骤查看识别片段、判定依据、转移风险和正常模板。" class="fade-in">
+    <el-tabs v-model="activeTab" class="audit-tabs">
+      <el-tab-pane label="时间线概览" name="overview" />
+      <el-tab-pane :label="`识别与依据 (${segments.length}/${evidenceRows.length})`" name="details" />
+      <el-tab-pane :label="`逐步转移 (${transitions.length})`" name="transitions" />
+      <el-tab-pane :label="`正常模板 (${candidates.length})`" name="templates" />
+      <el-tab-pane label="JSON 结果" name="json" />
+    </el-tabs>
+    <p v-if="activeTab === 'overview'" class="tab-overview-copy">
+      上方时间线按照抓包中的发生顺序恢复动作；红色节点表示对应转移被判为低概率、未见或明确异常。
+    </p>
+  </SectionBlock>
+
+  <section v-if="result && activeTab === 'details'" class="grid-2 result-detail-grid fade-in">
     <div class="panel">
       <div class="section-header">
         <div>
@@ -373,7 +406,7 @@ const exportJson = () => {
     </div>
   </section>
 
-  <section v-if="transitions.length" class="panel fade-in">
+  <section v-if="transitions.length && activeTab === 'transitions'" class="panel fade-in">
     <div class="section-header">
       <div>
         <h2 class="section-title">逐步转移检查</h2>
@@ -389,7 +422,9 @@ const exportJson = () => {
         <el-table-column label="动作转移" min-width="210">
           <template #default="{ row }">{{ row.previous }} → {{ row.actual }}</template>
         </el-table-column>
-        <el-table-column prop="decision" label="判断" width="112" />
+        <el-table-column label="判断" width="124">
+          <template #default="{ row }"><RiskBadge :status="row.decision" :label="row.decision" /></template>
+        </el-table-column>
         <el-table-column label="上下文概率" width="118">
           <template #default="{ row }">{{ Number(row.context_probability ?? row.probability ?? 0).toFixed(3) }}</template>
         </el-table-column>
@@ -401,7 +436,7 @@ const exportJson = () => {
     </div>
   </section>
 
-  <section v-if="candidates.length" class="panel fade-in">
+  <section v-if="candidates.length && activeTab === 'templates'" class="panel fade-in">
     <div class="section-header">
       <div>
         <h2 class="section-title">正常模板对照</h2>
@@ -423,13 +458,8 @@ const exportJson = () => {
     </div>
   </section>
 
-  <section v-if="result" class="panel fade-in">
-    <el-collapse class="raw-collapse">
-      <el-collapse-item name="raw">
-        <template #title><strong>实验原始数据（JSON）</strong></template>
-        <pre class="json-preview">{{ rawJson }}</pre>
-      </el-collapse-item>
-    </el-collapse>
+  <section v-if="result && activeTab === 'json'" class="panel fade-in">
+    <JsonViewer :data="result" :filename="`${result.run_id || 'motion_sequence'}_result.json`" title="动作序列原始结果" />
   </section>
 
   <section v-else class="empty-state fade-in">
@@ -438,6 +468,11 @@ const exportJson = () => {
 </template>
 
 <style scoped>
+.result-overview {
+  display: grid;
+  gap: 16px;
+}
+
 .motion-workbench {
   border-top: 3px solid var(--accent);
 }
@@ -635,6 +670,62 @@ const exportJson = () => {
   border: 1px solid var(--line-soft);
   border-radius: 6px;
   background: var(--surface-2);
+}
+
+.motion-timeline {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 18px 4px 8px;
+}
+
+.timeline-node {
+  position: relative;
+  flex: 0 0 162px;
+  min-height: 94px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--normal);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.timeline-node.is-risk {
+  border-color: #efc5c8;
+  border-top-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.timeline-node strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.timeline-node span {
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
+.timeline-node small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.motion-timeline .sequence-arrow {
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+.tab-overview-copy {
+  margin: 0;
+  padding: 3px 0 6px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .sequence-node {
