@@ -16,14 +16,14 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: HomeView },
-    { path: '/unified-analysis', name: 'unified-analysis', component: UnifiedAnalysisView, meta: { title: '三维统一安全分析', description: '上传一次 PCAP，并行完成侧信道、通信载荷和动作时序检测。' } },
+    { path: '/unified-analysis', name: 'unified-analysis', component: UnifiedAnalysisView, meta: { title: '三维统一安全分析', description: '上传一次 PCAP，并行完成连接侧信道、加密流量表征和动作时序检测。' } },
     { path: '/side-channel', name: 'side-channel', component: SideChannelView, meta: { title: '侧信道流量分析', description: '从通信元数据、IP 与端口行为中定位可疑连接和异常数据包。' } },
-    { path: '/payload', name: 'payload', component: EtBertView, meta: { title: '通信载荷检测', description: '使用 ET-BERT 包级与流级模型识别载荷异常和未知通信模式。' } },
+    { path: '/payload', name: 'payload', component: EtBertView, meta: { title: '加密流量表征检测', description: '使用 ET-BERT 包级与流级模型识别加密流量中的异常内容模式。' } },
     { path: '/motion', name: 'motion', component: MotionView, meta: { title: '动作序列识别与异常分析', description: '恢复机器狗动作时间线，并检查上下文转移与任务流程一致性。' } },
     { path: '/defense', name: 'defense', component: DefenseView, meta: { title: '系统集成防御', description: '通过受控 SSH 通道管理透明转发、完整防御链和安全验证指令。' } },
     { path: '/papb', redirect: '/motion' },
-    { path: '/history', name: 'history', component: HistoryView, meta: { title: '审计历史', description: '检索、复核并导出历史检测任务与审计证据。', requiresAuth: true } },
-    { path: '/profile', name: 'profile', component: ProfileView, meta: { title: '账户设置', description: '管理本地审计账户与个人偏好。', requiresAuth: true } },
+    { path: '/history', name: 'history', component: HistoryView, meta: { title: '检测记录', description: '检索、复核并导出历史检测任务与安全证据。', requiresAuth: true } },
+    { path: '/profile', name: 'profile', component: ProfileView, meta: { title: '账户设置', description: '管理本地系统账户与个人偏好。', requiresAuth: true } },
   ],
   scrollBehavior() {
     return { top: 0 }

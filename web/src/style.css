@@ -174,7 +174,7 @@ textarea {
 }
 
 .sidebar-nav a.router-link-active {
-  background: #edf3ff;
+  background: #eaf5f3;
   color: var(--accent);
   font-weight: 750;
 }
@@ -1243,6 +1243,43 @@ textarea {
   font-weight: 650;
 }
 
+.el-button--primary {
+  --el-button-bg-color: #176f68;
+  --el-button-border-color: #176f68;
+  --el-button-hover-bg-color: #23857c;
+  --el-button-hover-border-color: #23857c;
+  --el-button-active-bg-color: #105b55;
+  --el-button-active-border-color: #105b55;
+  --el-button-disabled-bg-color: #d9ebe8;
+  --el-button-disabled-border-color: #c7dfdb;
+}
+
+.el-button--primary.is-plain {
+  --el-button-text-color: #176f68;
+  --el-button-bg-color: #eef7f5;
+  --el-button-border-color: #a9cec8;
+  --el-button-hover-text-color: #ffffff;
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: #176f68;
+}
+
+.el-tabs__active-bar {
+  background-color: #176f68;
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  border-color: #176f68;
+  background-color: #176f68;
+}
+
+.el-checkbox__input.is-checked + .el-checkbox__label {
+  color: #176f68;
+}
+
 .el-button,
 .text-login,
 .account-button {
@@ -1857,6 +1894,9 @@ textarea {
 @media (max-width: 980px) {
   .workbench-shell {
     grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .console-sidebar {
@@ -1866,6 +1906,9 @@ textarea {
     padding: 12px 14px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .sidebar-brand {
@@ -1882,6 +1925,9 @@ textarea {
     flex-wrap: nowrap;
     padding-bottom: 2px;
     overflow-x: auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .sidebar-nav a {

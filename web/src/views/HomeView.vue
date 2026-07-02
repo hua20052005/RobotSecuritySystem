@@ -26,13 +26,13 @@ const modules = [
     output: '异常连接与可疑包',
   },
   {
-    title: '通信载荷检测',
-    description: '使用 ET-BERT 双粒度模型检查流量与报文异常。',
+    title: '加密流量表征检测',
+    description: '使用 ET-BERT 双粒度模型识别加密流量中的异常模式。',
     route: '/payload',
     icon: Lock,
     tone: 'coral',
     index: '02',
-    input: 'PCAP 载荷',
+    input: '加密流量表征',
     output: '异常类别与置信度',
   },
   {
@@ -45,25 +45,6 @@ const modules = [
     input: '控制链路 PCAP',
     output: '动作时间线与流程结论',
   },
-  {
-    title: '系统集成防御',
-    description: '远程编排检测桥接与 UDP 防御代理，验证放行和拦截。',
-    route: '/defense',
-    icon: SetUp,
-    tone: 'amber',
-    index: '04',
-    input: '实时控制流量',
-    output: '风险处置与拦截日志',
-  },
-]
-
-const pipeline = ['PCAP 上传', '侧信道分析', '载荷检测', '动作序列识别', 'PAPB 流程校验', '审计报告']
-const capabilities = [
-  '非侵入式流量审计',
-  '双粒度载荷检测',
-  '动作序列恢复',
-  '流程异常告警',
-  '历史追溯与证据导出',
 ]
 </script>
 
@@ -71,8 +52,8 @@ const capabilities = [
   <main class="home">
     <header class="home-nav">
       <RouterLink class="home-brand" to="/">
-        <span class="home-brand-mark">R</span>
-        <span><strong>RobotSec</strong><small>Security Console</small></span>
+        <img class="home-brand-mark" src="/roboguard-mark.svg" alt="" />
+        <span><strong>RoboGuard</strong><small>Embodied Security</small></span>
       </RouterLink>
       <div class="home-nav-actions">
         <button type="button" @click="openAuth?.('login')">登录</button>
@@ -83,8 +64,9 @@ const capabilities = [
     <section class="home-hero" :style="{ backgroundImage: `url(${robotDogHero})` }">
       <div class="hero-copy">
         <span class="hero-kicker"><i></i> Robot traffic intelligence</span>
-        <h1>机器人控制流量<br>安全审计系统</h1>
-        <p>把通信侧信道、载荷内容和动作时序放入一条清晰的审计链路，从原始抓包追踪到可解释的异常证据。</p>
+        <h1>RoboGuard</h1>
+        <p class="hero-product-title">面向具身智能控制链路的安全防御系统</p>
+        <p>融合连接侧信道、加密流量表征与动作时序分析，从原始流量发现风险并联动实时防御。</p>
         <div class="hero-actions">
           <el-button type="primary" size="large" @click="router.push('/unified-analysis')">
             三维统一分析
@@ -96,7 +78,7 @@ const capabilities = [
 
       <div class="hero-status">
         <span class="status-pulse"></span>
-        <div><strong>审计节点已就绪</strong><small>Local analysis pipeline</small></div>
+        <div><strong>检测节点已就绪</strong><small>Local defense pipeline</small></div>
       </div>
     </section>
 
@@ -106,7 +88,7 @@ const capabilities = [
           <span>核心模块</span>
           <h2>从流量到行为的三层检测</h2>
         </div>
-        <p>按需进入任一模块，也可以沿侧信道、载荷、动作序列的顺序完成整套分析。</p>
+        <p>按需进入任一模块，也可以沿侧信道、加密表征、动作序列的顺序完成整套分析。</p>
       </div>
 
       <div class="module-grid">
@@ -128,22 +110,17 @@ const capabilities = [
       </div>
     </section>
 
-    <section class="pipeline-section">
-      <div class="module-heading">
-        <div><span>系统检测链路</span><h2>一份抓包，形成完整审计证据</h2></div>
-        <p>各模块既可以独立运行，也可以沿统一链路逐步收敛到动作与流程结论。</p>
+    <section class="defense-entry">
+      <span class="defense-entry-icon"><el-icon><SetUp /></el-icon></span>
+      <div>
+        <span>主动防御控制平面</span>
+        <h2>从发现风险，到实时拦截</h2>
+        <p>连接机器狗后编排检测桥接与控制链路防御代理，切换透明转发或完整防御，并查看实时处置日志。</p>
       </div>
-      <div class="pipeline-track">
-        <template v-for="(step, index) in pipeline" :key="step">
-          <div class="pipeline-step"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ step }}</strong></div>
-          <ArrowRight v-if="index < pipeline.length - 1" class="pipeline-arrow" />
-        </template>
-      </div>
-    </section>
-
-    <section class="capability-section">
-      <div><span>平台能力</span><h2>围绕机器人控制链路构建</h2></div>
-      <ul><li v-for="item in capabilities" :key="item">{{ item }}</li></ul>
+      <el-button size="large" type="primary" @click="router.push('/defense')">
+        进入防御控制台
+        <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+      </el-button>
     </section>
   </main>
 </template>
@@ -266,6 +243,15 @@ const capabilities = [
   line-height: 1.75;
 }
 
+.hero-copy .hero-product-title {
+  max-width: 560px;
+  margin: -7px 0 12px;
+  color: #20383b;
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
 .hero-actions {
   display: flex;
   align-items: center;
@@ -325,7 +311,7 @@ const capabilities = [
 }
 
 .module-heading span {
-  color: #2f6fed;
+  color: #176f68;
   font-size: 12px;
   font-weight: 750;
 }
@@ -344,7 +330,7 @@ const capabilities = [
 
 .module-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -402,11 +388,6 @@ const capabilities = [
   color: #278554;
 }
 
-.is-amber .module-icon {
-  background: #fff5df;
-  color: #b56a13;
-}
-
 .module-card > strong {
   align-self: end;
   margin-top: 28px;
@@ -447,87 +428,53 @@ const capabilities = [
   align-items: center;
   gap: 6px;
   margin-top: 22px;
-  color: #2f6fed;
+  color: #176f68;
   font-size: 12px;
   font-weight: 750;
 }
 
-.pipeline-section,
-.capability-section {
-  max-width: 1260px;
-  margin: 64px auto 0;
-}
-
-.pipeline-track {
+.defense-entry {
   display: grid;
-  grid-template-columns: repeat(11, auto);
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   align-items: center;
-  padding: 24px 26px;
-  border-top: 1px solid #dce3e7;
-  border-bottom: 1px solid #dce3e7;
+  gap: 22px;
+  max-width: 1260px;
+  margin: 54px auto 0;
+  padding: 28px 30px;
+  border-top: 1px solid #ccd8d7;
+  border-bottom: 1px solid #ccd8d7;
+  background: #e5efed;
 }
 
-.pipeline-step {
+.defense-entry-icon {
   display: grid;
-  gap: 5px;
-}
-
-.pipeline-step span {
-  color: #83909b;
-  font-size: 10px;
-  font-weight: 750;
-}
-
-.pipeline-step strong {
-  color: #25313c;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.pipeline-arrow {
-  width: 17px;
-  margin: 0 14px;
-  color: #a5b0b8;
-}
-
-.capability-section {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 32px;
-  padding-top: 38px;
-  border-top: 1px solid #dce3e7;
-}
-
-.capability-section span {
-  color: #345d9d;
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.capability-section h2 {
-  margin: 8px 0 0;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 8px;
+  background: #176f68;
+  color: white;
   font-size: 25px;
 }
 
-.capability-section ul {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  max-width: 690px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.defense-entry > div > span {
+  color: #176f68;
+  font-size: 11px;
+  font-weight: 750;
 }
 
-.capability-section li {
-  padding: 7px 10px;
-  border: 1px solid #dce3e7;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.56);
-  color: #53616e;
-  font-size: 12px;
+.defense-entry h2 {
+  margin: 5px 0 5px;
+  color: #1e2b2e;
+  font-size: 22px;
+}
+
+.defense-entry p {
+  max-width: 720px;
+  margin: 0;
+  color: #5b696d;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 @media (max-width: 900px) {
@@ -556,23 +503,13 @@ const capabilities = [
     flex-direction: column;
   }
 
-  .pipeline-track {
-    grid-template-columns: 1fr;
-    gap: 10px;
+  .defense-entry {
+    grid-template-columns: 52px minmax(0, 1fr);
   }
 
-  .pipeline-arrow {
-    margin: 0 0 0 12px;
-    transform: rotate(90deg);
-  }
-
-  .capability-section {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .capability-section ul {
-    justify-content: flex-start;
+  .defense-entry .el-button {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 

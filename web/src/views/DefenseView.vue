@@ -23,31 +23,64 @@ const selectedLog = ref('defense')
 const logContent = ref('')
 const safetyConfirmed = ref(false)
 const operationError = ref('')
+const activePanel = ref('test')
 
 const serviceLabels = {
   etbert_api: 'ET-BERT API',
-  payload_bridge: '载荷检测桥接',
+  payload_bridge: '加密表征检测桥接',
   side_bridge: '侧信道检测桥接',
-  proxy: 'UDP 防御代理',
+  proxy: '控制链路防御代理',
 }
 const fileLabels = {
-  proxy: 'UDP 防御代理',
-  payload_bridge: '载荷检测桥接脚本',
+  proxy: '控制链路防御代理',
+  payload_bridge: '加密表征检测桥接脚本',
   side_bridge: '侧信道检测桥接脚本',
   command_sender: '安全测试指令脚本',
   etbert_app: 'ET-BERT API',
   python: '机器人 Python 环境',
+  connection_firewall: '异常连接防火墙',
+  packet_sniffer: '被动流量监测脚本',
 }
-const modeLabel = computed(() => ({
-  stopped: '未运行',
-  transparent: '透明转发',
-  defense: '完整防御',
-})[environment.value?.mode] || '尚未检查')
-const modeDisplay = computed(() => (
-  environment.value?.readiness === 'degraded'
-    ? `${modeLabel.value}（组件异常）`
-    : modeLabel.value
+
+const onlineCount = computed(() => Object.keys(serviceLabels).filter((key) => environment.value?.services?.[key]).length)
+const fullActive = computed(() => environment.value?.mode === 'defense')
+const transparentActive = computed(() => environment.value?.mode === 'transparent')
+const firewallActive = computed(() => environment.value?.mode === 'firewall')
+const isStarting = computed(() => ['full', 'transparent', 'firewall'].includes(busy.value))
+const componentDisplay = computed(() => (
+  firewallActive.value
+    ? `${environment.value?.services?.connection_firewall ? 1 : 0} / 1`
+    : `${onlineCount.value} / 4`
 ))
+const stateTone = computed(() => {
+  if (operationError.value) return 'error'
+  if (isStarting.value) return 'starting'
+  if (fullActive.value && environment.value?.readiness === 'degraded') return 'warning'
+  if (fullActive.value) return 'protected'
+  if (firewallActive.value) return 'firewall'
+  if (transparentActive.value) return 'transparent'
+  return 'idle'
+})
+const stateTitle = computed(() => {
+  if (busy.value === 'full') return '正在建立完整防御链'
+  if (busy.value === 'transparent') return '正在切换透明转发'
+  if (busy.value === 'firewall') return '正在部署异常连接防火墙'
+  if (operationError.value) return '防御控制操作未完成'
+  if (fullActive.value && environment.value?.readiness === 'degraded') return '完整防御存在组件异常'
+  if (fullActive.value) return '完整防御正在运行'
+  if (firewallActive.value) return '异常连接识别防御正在运行'
+  if (transparentActive.value) return '透明转发正在运行'
+  if (environment.value?.connected) return '机器狗已连接，防御未启动'
+  return '等待连接机器狗'
+})
+const stateDescription = computed(() => {
+  if (isStarting.value) return '系统正在依次启动并校验远程组件，请保持机器狗 AP 连接。'
+  if (fullActive.value) return `检测桥接与代理已接入控制链路，${onlineCount.value}/4 个组件在线。`
+  if (firewallActive.value) return '异常连接识别模块正在实时分析连接来源，并联动内核规则拦截异常访问。'
+  if (transparentActive.value) return '当前流量将直接转发，不执行检测与拦截，仅用于对照实验。'
+  if (operationError.value) return '查看下方错误信息或组件运行日志后重试。'
+  return '检查远程环境后，可启动完整防御或透明转发对照组。'
+})
 
 const credentials = () => ({
   host: connection.host.trim(),
@@ -101,11 +134,29 @@ const startTransparent = async () => {
   } catch {
     return
   }
-  await run('transparent', 'start-transparent')
+  const data = await run('transparent', 'start-transparent')
+  if (data) selectedLog.value = 'transparent'
 }
 
 const startFull = async () => {
-  await run('full', 'start-full')
+  const data = await run('full', 'start-full')
+  if (data) selectedLog.value = 'defense'
+}
+
+const startFirewall = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '将启动异常连接识别，异常来源将被丢弃。',
+      '启动异常连接识别防御',
+      { type: 'warning', confirmButtonText: '确认启动', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  const data = await run('firewall', 'start-firewall')
+  if (data) {
+    selectedLog.value = 'firewall'
+  }
 }
 
 const stopAll = async () => {
@@ -151,409 +202,606 @@ const refreshLogs = async () => {
 </script>
 
 <template>
-  <section class="defense-intro">
-    <div>
-      <span>ACTIVE DEFENSE</span>
-      <h1>系统集成防御</h1>
-      <p>通过受控 SSH 通道管理机器狗上的透明转发与完整防御链，并从统一入口验证放行和拦截效果。</p>
+  <section class="defense-state" :class="`is-${stateTone}`">
+    <div class="state-symbol">
+      <el-icon v-if="stateTone === 'protected' || stateTone === 'firewall'"><CircleCheck /></el-icon>
+      <el-icon v-else-if="stateTone === 'transparent' || stateTone === 'warning' || stateTone === 'error'"><Warning /></el-icon>
+      <el-icon v-else><Connection /></el-icon>
     </div>
-    <div class="mode-state" :class="`is-${environment?.mode || 'unknown'}`">
-      <i></i>
-      <span>当前模式</span>
-      <strong>{{ modeDisplay }}</strong>
+    <div class="state-copy">
+      <span>主动防御控制平面</span>
+      <h2>{{ stateTitle }}</h2>
+      <p>{{ stateDescription }}</p>
+    </div>
+    <div class="state-facts">
+      <span><small>运行模式</small><strong>{{ fullActive ? '完整防御' : firewallActive ? '连接防火墙' : transparentActive ? '透明转发' : '未启动' }}</strong></span>
+      <span><small>在线组件</small><strong>{{ componentDisplay }}</strong></span>
+      <span><small>防御入口</small><strong>{{ firewallActive ? '原生入口已保护' : environment?.ports?.udp_43894 ? '代理入口已监听' : '未监听' }}</strong></span>
+    </div>
+    <el-button
+      v-if="fullActive || transparentActive || firewallActive"
+      class="state-action"
+      type="danger"
+      plain
+      :icon="SwitchButton"
+      :loading="busy === 'stop'"
+      @click="stopAll"
+    >
+      停止当前模式
+    </el-button>
+    <el-button
+      v-else
+      class="state-action"
+      :icon="Refresh"
+      :loading="busy === 'check'"
+      @click="checkEnvironment"
+    >
+      检查远程环境
+    </el-button>
+  </section>
+
+  <section v-if="operationError" class="operation-error">
+    <el-icon><Warning /></el-icon>
+    <div><strong>操作失败</strong><pre>{{ operationError }}</pre></div>
+  </section>
+
+  <section class="connection-strip">
+    <div class="strip-title">
+      <span>SSH CONNECTION</span>
+      <strong>机器狗连接</strong>
+    </div>
+    <label><span>地址</span><el-input v-model="connection.host" placeholder="192.168.2.1" /></label>
+    <label><span>用户</span><el-input v-model="connection.username" placeholder="ysc" /></label>
+    <label><span>SSH / sudo 密码</span><el-input v-model="connection.ssh_password" type="password" show-password /></label>
+    <el-button :icon="Refresh" :loading="busy === 'check'" @click="checkEnvironment">重新检查</el-button>
+  </section>
+
+  <section class="defense-workspace">
+    <div class="mode-control">
+      <div class="workspace-heading">
+        <span>防御模式</span>
+        <strong>选择控制链路处置方式</strong>
+      </div>
+
+      <div class="mode-row is-full" :class="{ active: fullActive }">
+        <span class="mode-index">A</span>
+        <div>
+          <strong>完整防御</strong>
+          <small>ET-BERT、侧信道、风险融合与控制链路代理</small>
+        </div>
+        <span v-if="fullActive" class="running-label"><i></i>运行中</span>
+        <el-button
+          v-else
+          type="primary"
+          :loading="busy === 'full'"
+          :disabled="Boolean(busy)"
+          @click="startFull"
+        >
+          启动防御
+        </el-button>
+      </div>
+
+      <div class="mode-row is-transparent" :class="{ active: transparentActive }">
+        <span class="mode-index">B</span>
+        <div>
+          <strong>透明转发对照</strong>
+          <small>控制流量直接转发，绕过全部检测与拦截</small>
+        </div>
+        <span v-if="transparentActive" class="running-label warning"><i></i>运行中</span>
+        <el-button
+          v-else
+          :icon="Promotion"
+          :loading="busy === 'transparent'"
+          :disabled="Boolean(busy)"
+          @click="startTransparent"
+        >
+          启动对照组
+        </el-button>
+      </div>
+
+      <div class="mode-row is-firewall" :class="{ active: firewallActive }">
+        <span class="mode-index">C</span>
+        <div>
+          <strong>异常连接识别防御</strong>
+          <small>异常连接实时分析 + 内核级联动拦截，保护原生控制入口</small>
+        </div>
+        <span v-if="firewallActive" class="running-label"><i></i>运行中</span>
+        <div v-else class="firewall-actions">
+          <el-button
+            type="primary"
+            plain
+            :loading="busy === 'firewall'"
+            :disabled="Boolean(busy)"
+            @click="startFirewall"
+          >
+            启动连接防御
+          </el-button>
+        </div>
+      </div>
+
+      <button class="stop-link" type="button" :disabled="Boolean(busy)" @click="stopAll">
+        <el-icon><SwitchButton /></el-icon>
+        停止并释放全部实验进程
+      </button>
+    </div>
+
+    <div class="component-monitor">
+      <div class="workspace-heading">
+        <span>组件状态</span>
+        <strong>{{ environment?.connected ? '远程环境已检查' : '尚未连接远程环境' }}</strong>
+      </div>
+      <div class="service-list">
+        <div v-for="(label, key) in serviceLabels" :key="key" class="service-line">
+          <i :class="{ online: environment?.services?.[key] }"></i>
+          <span>{{ label }}</span>
+          <b>{{ environment?.services?.[key] ? '在线' : '停止' }}</b>
+        </div>
+        <div class="service-line port-line">
+          <i :class="{ online: environment?.ports?.udp_43894 }"></i>
+          <span>控制链路代理入口</span>
+          <b>{{ environment?.ports?.udp_43894 ? '监听中' : '未监听' }}</b>
+        </div>
+        <div class="service-line firewall-line">
+          <i :class="{ online: environment?.services?.connection_firewall }"></i>
+          <span>异常连接防火墙</span>
+          <b>{{ environment?.services?.connection_firewall ? 'iptables 已生效' : '未启用' }}</b>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="panel connection-panel">
-    <div class="section-header">
-      <div>
-        <h2 class="section-title">机器狗连接</h2>
-        <p class="panel-sub">密码只随本次请求发送，不写入浏览器存储。连接机器狗 AP 后再执行检查。</p>
-      </div>
-      <el-button :icon="Refresh" :loading="busy === 'check'" @click="checkEnvironment">检查环境</el-button>
-    </div>
-    <div class="connection-grid">
-      <label><span>机器狗地址</span><el-input v-model="connection.host" placeholder="192.168.2.1" /></label>
-      <label><span>SSH 用户</span><el-input v-model="connection.username" placeholder="ysc" /></label>
-      <label><span>SSH 密码</span><el-input v-model="connection.ssh_password" type="password" show-password /></label>
-    </div>
-    <div v-if="operationError" class="operation-error">
-      <el-icon><Warning /></el-icon>
-      <pre>{{ operationError }}</pre>
-    </div>
-  </section>
+  <section class="operations-console">
+    <el-tabs v-model="activePanel">
+      <el-tab-pane label="链路验证" name="test">
+        <div class="tab-heading">
+          <div><strong>发送受控测试指令</strong><span>全部指令固定进入安全代理入口</span></div>
+          <el-checkbox v-model="safetyConfirmed">场地已清空并准备急停</el-checkbox>
+        </div>
+        <p v-if="firewallActive" class="firewall-test-note">
+          连接防御直接保护原生控制入口，请从正常控制端发送指令验证；页面测试指令仅用于代理模式。
+        </p>
+        <div v-else class="test-actions">
+          <el-button :icon="Connection" :loading="busy === 'command-HEARTBEAT'" @click="sendCommand('HEARTBEAT')">
+            HEARTBEAT
+          </el-button>
+          <el-button
+            type="primary"
+            plain
+            :loading="busy === 'command-STAND_UP'"
+            :disabled="!safetyConfirmed"
+            @click="sendCommand('STAND_UP')"
+          >
+            STAND_UP
+          </el-button>
+          <el-button
+            type="primary"
+            plain
+            :loading="busy === 'command-STAND_DOWN'"
+            :disabled="!safetyConfirmed"
+            @click="sendCommand('STAND_DOWN')"
+          >
+            STAND_DOWN
+          </el-button>
+        </div>
+      </el-tab-pane>
 
-  <section class="status-band">
-    <div class="status-title">
-      <span>运行状态</span>
-      <strong>{{ environment?.connected ? 'SSH 已连接' : '等待环境检查' }}</strong>
-    </div>
-    <div v-for="(label, key) in serviceLabels" :key="key" class="service-state">
-      <el-icon :class="{ active: environment?.services?.[key] }">
-        <CircleCheck v-if="environment?.services?.[key]" />
-        <Warning v-else />
-      </el-icon>
-      <span>{{ label }}</span>
-      <b>{{ environment?.services?.[key] ? '运行中' : '未运行' }}</b>
-    </div>
-    <div class="service-state">
-      <el-icon :class="{ active: environment?.ports?.udp_43894 }"><Connection /></el-icon>
-      <span>防御入口 43894/UDP</span>
-      <b>{{ environment?.ports?.udp_43894 ? '监听中' : '未监听' }}</b>
-    </div>
-  </section>
+      <el-tab-pane label="运行日志" name="logs">
+        <div class="tab-heading">
+          <div><strong>远程运行日志</strong><span>查看当前实验的转发、拦截和组件输出</span></div>
+          <div class="log-actions">
+            <el-select v-model="selectedLog" style="width: 180px">
+              <el-option label="完整防御日志" value="defense" />
+              <el-option label="透明转发日志" value="transparent" />
+              <el-option label="检测结果 JSONL" value="detection" />
+              <el-option label="组件运行日志" value="services" />
+              <el-option label="连接防火墙日志" value="firewall" />
+              <el-option label="防火墙启动日志" value="firewall_console" />
+            </el-select>
+            <el-button :icon="Refresh" :loading="busy === 'logs'" @click="refreshLogs">刷新</el-button>
+          </div>
+        </div>
+        <pre class="log-output">{{ logContent || '选择日志并点击刷新。' }}</pre>
+      </el-tab-pane>
 
-  <section v-if="environment?.files" class="panel">
-    <div class="section-header">
-      <div>
-        <h2 class="section-title">组件完整性</h2>
-        <p class="panel-sub">完整防御启动前，代理、两个桥接脚本和 Python 环境必须存在。</p>
-      </div>
-    </div>
-    <div class="file-grid">
-      <span v-for="(label, key) in fileLabels" :key="key" :class="{ missing: !environment.files[key] }">
-        <el-icon><CircleCheck v-if="environment.files[key]" /><Warning v-else /></el-icon>
-        {{ label }}
-        <b>{{ environment.files[key] ? '已就绪' : '缺失' }}</b>
-      </span>
-    </div>
-  </section>
-
-  <section class="control-layout">
-    <div class="control-column">
-      <div class="control-head">
-        <span>01</span>
-        <div><strong>对照组：透明转发</strong><small>43894 → 43893，不启用检测和拦截</small></div>
-      </div>
-      <p>仅用于证明无防御时控制包能够直接影响机器狗。启动后日志应显示 PASS / FORWARD。</p>
-      <el-button type="warning" :icon="Promotion" :loading="busy === 'transparent'" @click="startTransparent">
-        启动透明转发
-      </el-button>
-    </div>
-
-    <div class="control-column emphasized">
-      <div class="control-head">
-        <span>02</span>
-        <div><strong>实验组：完整防御</strong><small>载荷 + 侧信道 + 风险融合 + UDP 代理</small></div>
-      </div>
-      <p>严格按实验流程依次启动本机 ET-BERT、载荷桥接、侧信道桥接和防御代理，并等待每一阶段就绪。</p>
-      <el-button type="primary" :icon="CircleCheck" :loading="busy === 'full'" @click="startFull">
-        启动完整防御
-      </el-button>
-    </div>
-
-    <div class="control-column">
-      <div class="control-head">
-        <span>03</span>
-        <div><strong>停止与恢复</strong><small>释放 43894 和 8010 相关实验进程</small></div>
-      </div>
-      <p>切换实验模式前先停止现有进程，避免端口占用或旧检测结果干扰下一轮实验。</p>
-      <el-button type="danger" plain :icon="SwitchButton" :loading="busy === 'stop'" @click="stopAll">
-        停止全部实验进程
-      </el-button>
-    </div>
-  </section>
-
-  <section class="panel test-panel">
-    <div class="section-header">
-      <div>
-        <h2 class="section-title">受控链路验证</h2>
-        <p class="panel-sub">指令固定发送到机器人本机 127.0.0.1:43894，不能输入自定义命令或绕过防御入口。</p>
-      </div>
-    </div>
-    <div class="test-actions">
-      <el-button :icon="Connection" :loading="busy === 'command-HEARTBEAT'" @click="sendCommand('HEARTBEAT')">
-        发送 HEARTBEAT
-      </el-button>
-      <el-button
-        type="primary"
-        plain
-        :loading="busy === 'command-STAND_UP'"
-        :disabled="!safetyConfirmed"
-        @click="sendCommand('STAND_UP')"
-      >
-        发送 STAND_UP
-      </el-button>
-      <el-button
-        type="primary"
-        plain
-        :loading="busy === 'command-STAND_DOWN'"
-        :disabled="!safetyConfirmed"
-        @click="sendCommand('STAND_DOWN')"
-      >
-        发送 STAND_DOWN
-      </el-button>
-      <el-checkbox v-model="safetyConfirmed">已清空机器狗周围场地并准备急停</el-checkbox>
-    </div>
-  </section>
-
-  <section class="panel log-panel">
-    <div class="section-header">
-      <div>
-        <h2 class="section-title">远程运行日志</h2>
-        <p class="panel-sub">查看透明转发、防御处置或各检测模块的最新记录。</p>
-      </div>
-      <div class="log-actions">
-        <el-select v-model="selectedLog" style="width: 190px">
-          <el-option label="完整防御日志" value="defense" />
-          <el-option label="透明转发日志" value="transparent" />
-          <el-option label="检测结果 JSONL" value="detection" />
-          <el-option label="组件运行日志" value="services" />
-        </el-select>
-        <el-button :icon="Refresh" :loading="busy === 'logs'" @click="refreshLogs">刷新日志</el-button>
-      </div>
-    </div>
-    <pre>{{ logContent || '连接机器狗后，选择日志并点击刷新。' }}</pre>
+      <el-tab-pane label="环境完整性" name="files">
+        <div class="tab-heading">
+          <div><strong>远程组件</strong><span>完整防御所需脚本与运行环境</span></div>
+          <el-button :icon="Refresh" :loading="busy === 'check'" @click="checkEnvironment">重新检查</el-button>
+        </div>
+        <div class="file-list">
+          <span v-for="(label, key) in fileLabels" :key="key" :class="{ missing: environment?.files && !environment.files[key] }">
+            <el-icon><CircleCheck v-if="environment?.files?.[key]" /><Warning v-else /></el-icon>
+            <b>{{ label }}</b>
+            <small>{{ environment?.files?.[key] ? '已就绪' : '未确认' }}</small>
+          </span>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
   </section>
 </template>
 
 <style scoped>
-.defense-intro {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 34px 38px;
-  border-bottom: 1px solid #dfe6eb;
-  background: #f5f8fa;
-}
-
-.defense-intro > div:first-child {
-  max-width: 700px;
-}
-
-.defense-intro span {
-  color: #24736b;
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.defense-intro h1 {
-  margin: 8px 0 10px;
-  color: #18212b;
-  font-size: 32px;
-}
-
-.defense-intro p {
-  margin: 0;
-  color: #61707d;
-  line-height: 1.7;
-}
-
-.mode-state {
+.defense-state {
   display: grid;
-  grid-template-columns: 10px auto;
-  gap: 2px 10px;
-  min-width: 160px;
-  padding-left: 20px;
-  border-left: 1px solid #cfd9df;
+  grid-template-columns: 64px minmax(260px, 1fr) auto auto;
+  align-items: center;
+  gap: 22px;
+  min-height: 150px;
+  padding: 26px 30px;
+  border: 1px solid #d7e0e2;
+  border-left: 5px solid #8d999f;
+  border-radius: 8px;
+  background: #f7f9f9;
+  transition: background 180ms ease, border-color 180ms ease;
+  min-width: 0;
 }
 
-.mode-state i {
-  grid-row: 1 / 3;
-  align-self: center;
-  width: 9px;
-  height: 9px;
+.defense-state.is-protected {
+  border-color: #a9cec4;
+  border-left-color: #176f68;
+  background: #e9f4f1;
+}
+
+.defense-state.is-firewall {
+  border-color: #a9cec4;
+  border-left-color: #176f68;
+  background: #e9f4f1;
+}
+
+.defense-state.is-transparent,
+.defense-state.is-warning {
+  border-color: #e7cda1;
+  border-left-color: #b76e16;
+  background: #fff8eb;
+}
+
+.defense-state.is-error {
+  border-color: #e4b8bc;
+  border-left-color: #c6454f;
+  background: #fff4f5;
+}
+
+.state-symbol {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
   border-radius: 50%;
-  background: #929da7;
+  background: #e5e9ea;
+  color: #66747a;
+  font-size: 30px;
 }
 
-.mode-state strong {
-  color: #263440;
+.is-protected .state-symbol,
+.is-firewall .state-symbol {
+  background: #176f68;
+  color: white;
 }
 
-.mode-state.is-defense i {
-  background: #168b62;
+.is-transparent .state-symbol,
+.is-warning .state-symbol {
+  background: #b76e16;
+  color: white;
 }
 
-.mode-state.is-transparent i {
-  background: #d98a17;
+.is-error .state-symbol {
+  background: #c6454f;
+  color: white;
 }
 
-.panel,
-.control-layout,
-.status-band {
-  margin: 18px 28px 0;
+.state-copy > span,
+.workspace-heading > span,
+.strip-title > span {
+  color: #176f68;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
-.connection-grid {
+.state-copy {
+  min-width: 0;
+}
+
+.state-copy h2 {
+  margin: 5px 0 6px;
+  color: #18272a;
+  font-size: 24px;
+}
+
+.state-copy p {
+  margin: 0;
+  color: #5c6c70;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.state-facts {
+  display: flex;
+  align-items: stretch;
+}
+
+.state-facts > span {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 18px;
+  min-width: 112px;
+  gap: 5px;
+  padding: 3px 18px;
+  border-left: 1px solid rgba(87, 112, 111, 0.22);
+}
+
+.state-facts small {
+  color: #748286;
+  font-size: 10px;
+}
+
+.state-facts strong {
+  color: #243538;
+  font-size: 13px;
+}
+
+.state-action {
+  min-width: 132px;
 }
 
 .operation-error {
   display: grid;
   grid-template-columns: 24px 1fr;
   gap: 10px;
-  margin-top: 16px;
-  padding: 13px 15px;
-  border: 1px solid #e7b9b9;
-  border-radius: 5px;
-  background: #fff5f5;
-  color: #a62f2f;
+  padding: 13px 16px;
+  border-left: 4px solid #c6454f;
+  background: #fff2f3;
+  color: #a62f3a;
 }
 
-.operation-error .el-icon {
-  margin-top: 2px;
+.operation-error strong {
+  font-size: 12px;
 }
 
 .operation-error pre {
-  margin: 0;
+  margin: 4px 0 0;
   overflow: auto;
   color: inherit;
-  font: 12px/1.65 Consolas, monospace;
+  font: 12px/1.6 Consolas, monospace;
   white-space: pre-wrap;
 }
 
-.connection-grid label {
+.connection-strip {
   display: grid;
-  gap: 7px;
+  grid-template-columns: 170px repeat(3, minmax(150px, 1fr)) auto;
+  align-items: end;
+  gap: 14px;
+  padding: 18px 0 20px;
+  border-bottom: 1px solid #dbe3e5;
 }
 
-.connection-grid label > span {
-  color: #3d4b57;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.status-band {
+.strip-title {
   display: grid;
-  grid-template-columns: 1.1fr repeat(5, minmax(0, 1fr));
-  border-top: 1px solid #dce4e9;
-  border-bottom: 1px solid #dce4e9;
+  gap: 3px;
+  align-self: center;
 }
 
-.status-title,
-.service-state {
-  display: grid;
-  min-height: 84px;
-  align-content: center;
-  padding: 14px;
-  border-right: 1px solid #dce4e9;
-}
-
-.status-title span,
-.service-state span {
-  color: #778490;
-  font-size: 11px;
-}
-
-.status-title strong {
-  margin-top: 4px;
+.strip-title strong {
   font-size: 14px;
 }
 
-.service-state {
-  grid-template-columns: 22px 1fr;
-}
-
-.service-state .el-icon {
-  grid-row: 1 / 3;
-  align-self: center;
-  color: #a6afb6;
-}
-
-.service-state .el-icon.active {
-  color: #168b62;
-}
-
-.service-state b {
-  margin-top: 3px;
-  color: #46535f;
-  font-size: 12px;
-}
-
-.file-grid {
+.connection-strip label {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 18px;
-  margin-top: 18px;
+  gap: 6px;
 }
 
-.file-grid > span {
-  display: grid;
-  grid-template-columns: 22px 1fr auto;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #e6ebee;
-  color: #3c4954;
-  font-size: 13px;
-}
-
-.file-grid .el-icon {
-  color: #168b62;
-}
-
-.file-grid b {
-  color: #168b62;
+.connection-strip label > span {
+  color: #66757a;
   font-size: 11px;
+  font-weight: 700;
 }
 
-.file-grid .missing .el-icon,
-.file-grid .missing b {
-  color: #c23f3f;
-}
-
-.control-layout {
+.defense-workspace {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid #dce4e9;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+  overflow: hidden;
+  border: 1px solid #dbe3e5;
+  border-radius: 8px;
   background: white;
 }
 
-.control-column {
-  display: flex;
-  min-height: 230px;
-  flex-direction: column;
-  padding: 24px;
-  border-right: 1px solid #dce4e9;
+.mode-control,
+.component-monitor {
+  padding: 24px 26px;
 }
 
-.control-column:last-child {
-  border-right: 0;
+.component-monitor {
+  border-left: 1px solid #e2e8ea;
+  background: #f7f9f9;
 }
 
-.control-column.emphasized {
-  border-top: 3px solid #168b62;
+.workspace-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 18px;
 }
 
-.control-head {
-  display: flex;
-  gap: 12px;
+.workspace-heading strong {
+  color: #263538;
+  font-size: 15px;
 }
 
-.control-head > span {
-  color: #8a96a1;
-  font-size: 11px;
-  font-weight: 750;
+.mode-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 88px;
+  padding: 15px 0;
+  border-top: 1px solid #e5eaec;
 }
 
-.control-head div {
+.mode-row.active {
+  margin-inline: -14px;
+  padding-inline: 14px;
+  background: #edf6f3;
+}
+
+.mode-row.is-transparent.active {
+  background: #fff7e9;
+}
+
+.mode-row.is-firewall.active {
+  background: #edf6f3;
+}
+
+.mode-index {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 6px;
+  background: #edf1f2;
+  color: #607075;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mode-row > div {
   display: grid;
   gap: 5px;
 }
 
-.control-head strong {
-  color: #26313b;
-  font-size: 15px;
+.mode-row > div strong {
+  font-size: 14px;
 }
 
-.control-head small,
-.control-column p {
-  color: #75828d;
+.mode-row > div small {
+  color: #718084;
+  font-size: 11px;
+}
+
+.running-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #176f68;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.running-label i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(23, 111, 104, 0.12);
+}
+
+.running-label.warning {
+  color: #b76e16;
+}
+
+.firewall-actions {
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.firewall-test-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid #176f68;
+  background: #eef7f5;
+  color: #405b5c;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.firewall-line {
+  margin-top: 2px;
+  border-top: 1px solid #d7e1e2;
+}
+
+.stop-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9f3942;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stop-link:disabled {
+  color: #9aa3a6;
+  cursor: not-allowed;
+}
+
+.service-list {
+  display: grid;
+}
+
+.service-line {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 45px;
+  border-bottom: 1px solid #e1e7e8;
+}
+
+.service-line i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #aab3b6;
+}
+
+.service-line i.online {
+  background: #238557;
+  box-shadow: 0 0 0 4px rgba(35, 133, 87, 0.1);
+}
+
+.service-line span {
+  color: #435357;
   font-size: 12px;
 }
 
-.control-column p {
-  flex: 1;
-  margin: 22px 0;
-  line-height: 1.7;
+.service-line b {
+  color: #718084;
+  font-size: 11px;
 }
 
-.control-column .el-button {
-  align-self: flex-start;
+.port-line {
+  margin-top: 7px;
+  border-bottom: 0;
+}
+
+.operations-console {
+  padding: 20px 24px 24px;
+  border: 1px solid #dbe3e5;
+  border-radius: 8px;
+  background: white;
+}
+
+.tab-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.tab-heading > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.tab-heading strong {
+  font-size: 14px;
+}
+
+.tab-heading span {
+  color: #748185;
+  font-size: 11px;
 }
 
 .test-actions,
@@ -564,82 +812,147 @@ const refreshLogs = async () => {
   gap: 10px;
 }
 
-.test-actions {
-  margin-top: 18px;
-}
-
-.test-actions .el-checkbox {
-  margin-left: auto;
-}
-
-.log-panel {
-  margin-bottom: 32px;
-}
-
-.log-panel pre {
-  min-height: 220px;
+.log-output {
+  min-height: 230px;
   max-height: 420px;
-  margin: 18px 0 0;
+  margin: 0;
   padding: 16px;
   overflow: auto;
-  border: 1px solid #d7e0e5;
-  border-radius: 5px;
-  background: #111820;
-  color: #c8d5d1;
+  border-radius: 6px;
+  background: #14201f;
+  color: #cbd9d4;
   font: 12px/1.65 Consolas, monospace;
   white-space: pre-wrap;
 }
 
+.file-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+.file-list > span {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 48px;
+  border-bottom: 1px solid #e4eaec;
+}
+
+.file-list .el-icon,
+.file-list small {
+  color: #238557;
+}
+
+.file-list b {
+  color: #435257;
+  font-size: 12px;
+}
+
+.file-list small {
+  font-size: 10px;
+}
+
+.file-list .missing .el-icon,
+.file-list .missing small {
+  color: #c6454f;
+}
+
 @media (max-width: 1100px) {
-  .connection-grid,
-  .file-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .defense-state {
+    grid-template-columns: 58px minmax(0, 1fr) auto;
   }
 
-  .status-band {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .state-facts {
+    grid-column: 2 / 4;
+  }
+
+  .connection-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  }
+
+  .strip-title {
+    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 760px) {
-  .defense-intro {
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 26px 20px;
+  .defense-state {
+    grid-template-columns: 48px minmax(0, 1fr);
+    padding: 22px 18px;
   }
 
-  .mode-state {
-    border-left: 0;
-    padding-left: 0;
+  .state-symbol {
+    width: 46px;
+    height: 46px;
+    font-size: 23px;
   }
 
-  .panel,
-  .control-layout,
-  .status-band {
-    margin-inline: 14px;
+  .state-facts,
+  .state-action {
+    grid-column: 1 / -1;
   }
 
-  .connection-grid,
-  .file-grid,
-  .control-layout,
-  .status-band {
+  .state-facts {
+    overflow-x: auto;
+  }
+
+  .state-facts > span {
+    min-width: 105px;
+  }
+
+  .connection-strip,
+  .defense-workspace,
+  .file-list {
     grid-template-columns: 1fr;
   }
 
-  .control-column,
-  .status-title,
-  .service-state {
-    border-right: 0;
-    border-bottom: 1px solid #dce4e9;
+  .mode-row {
+    grid-template-columns: 32px minmax(0, 1fr);
   }
 
-  .test-actions {
+  .mode-row > .el-button,
+  .mode-row > .running-label,
+  .mode-row > .firewall-actions {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .connection-strip {
+    align-items: stretch;
+  }
+
+  .strip-title {
+    grid-column: auto;
+  }
+
+  .component-monitor {
+    border-top: 1px solid #e2e8ea;
+    border-left: 0;
+  }
+
+  .tab-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .test-actions,
+  .log-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .test-actions .el-checkbox {
-    margin-left: 0;
+  .firewall-actions {
+    width: 100%;
+  }
+
+  .log-actions {
+    width: 100%;
+  }
+
+  .log-actions .el-select,
+  .test-actions .el-button {
+    width: 100% !important;
   }
 }
 </style>

@@ -96,7 +96,7 @@ const featureLabelMap = {
   dst_ip_num: '目的 IP 编码',
   port: '目的端口',
   size: '包长度',
-  entropy: '载荷熵',
+  entropy: '加密内容熵',
   src_ip_num: '源 IP 编码',
   interval: '发送间隔',
   idx: '序号',
@@ -108,12 +108,12 @@ const columnLabelMap = {
   port: '目的端口',
   size: '包长度',
   interval: '发送间隔',
-  entropy: '载荷熵',
+  entropy: '加密内容熵',
   anomaly_score: '异常分数',
   src_ip_num: '源 IP 编码',
   dst_ip_num: '目的 IP 编码',
   timestamp: '时间戳',
-  raw_hex_head: '载荷前缀',
+  raw_hex_head: '加密内容特征',
 }
 const profileColumnLabelMap = {
   ip: 'IP 地址',
@@ -397,8 +397,8 @@ watch(activeTab, async () => {
   <ModuleHero
     objective="从包长、方向、间隔和连接画像中发现离群通信"
     input="PCAP / PCAPNG 元数据"
-    output="异常包、异常连接与二次审计结论"
-    scenario="非侵入式控制链路流量审计"
+    output="异常包、异常连接与二次研判结论"
+    scenario="非侵入式控制链路流量分析"
   />
   <section
     class="panel fade-in"
@@ -492,9 +492,9 @@ watch(activeTab, async () => {
   <section v-if="result" ref="resultRef" class="side-result-summary fade-in">
     <ResultSummary
       :status="auditStatus"
-      :title="`审计结论：${auditStatusText}`"
+      :title="`检测结论：${auditStatusText}`"
       :description="judgeResult?.assessment || `IsolationForest 在当前文件中标记了 ${summary.abnormal || 0} 个离群数据包。`"
-      :advice="auditStatus === 'ANOMALY' ? '切到「二次判断」页点击开始判断，确认风险连接来源。' : '继续查看 IP 与端口画像，保留本次审计记录。'"
+      :advice="auditStatus === 'ANOMALY' ? '切到「二次判断」页点击开始判断，确认风险连接来源。' : '继续查看 IP 与端口画像，保留本次检测记录。'"
       :task-id="result.run_id"
       :duration="`${(elapsedMs / 1000).toFixed(2)} s`"
     >
@@ -508,7 +508,7 @@ watch(activeTab, async () => {
     </div>
   </section>
 
-  <SectionBlock v-if="result" title="审计链路" description="沿元数据、连接画像、异常证据和二次判断逐步复核。" class="fade-in">
+  <SectionBlock v-if="result" title="分析链路" description="沿元数据、连接画像、异常证据和二次判断逐步复核。" class="fade-in">
     <el-tabs v-model="activeTab" class="audit-tabs">
       <el-tab-pane label="风险概览" name="overview" />
       <el-tab-pane :label="`IP / 端口 (${ipProfilesTable.total || 0}/${portProfilesTable.total || 0})`" name="profiles" />

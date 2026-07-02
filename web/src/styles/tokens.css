@@ -10,10 +10,10 @@
   --muted: #74808b;
   --sidebar: #ffffff;
   --sidebar-2: #f5f7f8;
-  --accent: #345d9d;
-  --accent-strong: #294b7f;
-  --accent-2: #178b89;
-  --accent-soft: #edf3fa;
+  --accent: #176f68;
+  --accent-strong: #105b55;
+  --accent-2: #d86a4d;
+  --accent-soft: #eaf5f3;
   --coral: #d86a4d;
   --coral-soft: #fff1ec;
   --normal: #238557;
@@ -26,7 +26,7 @@
   --danger-soft: #fff1f2;
   --warning: #b76e16;
   --ok: #238557;
-  --running: #345d9d;
+  --running: #176f68;
   --pending: #7d8791;
   --radius: 8px;
   --radius-sm: 6px;
@@ -34,13 +34,13 @@
   --shadow-soft: 0 12px 32px rgba(35, 49, 60, 0.08);
   --shadow-card: 0 1px 2px rgba(35, 49, 60, 0.03), 0 8px 24px rgba(35, 49, 60, 0.045);
 
-  --el-color-primary: #345d9d;
-  --el-color-primary-light-3: #708cb7;
-  --el-color-primary-light-5: #9aaecb;
-  --el-color-primary-light-7: #c4d0df;
-  --el-color-primary-light-8: #d9e1eb;
-  --el-color-primary-light-9: #edf3fa;
-  --el-color-primary-dark-2: #294b7f;
+  --el-color-primary: #176f68;
+  --el-color-primary-light-3: #5d9a95;
+  --el-color-primary-light-5: #8bb7b3;
+  --el-color-primary-light-7: #b9d4d1;
+  --el-color-primary-light-8: #d1e3e1;
+  --el-color-primary-light-9: #eaf5f3;
+  --el-color-primary-dark-2: #105b55;
   --el-border-radius-base: 6px;
 
   font-family: Inter, 'Geist', 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;

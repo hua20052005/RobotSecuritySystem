@@ -72,7 +72,7 @@ onMounted(loadProfile)
       <span>注册于 {{ formatTime(profile.created_at) }}</span>
       <div class="profile-mini-stats">
         <div><strong>{{ profile.total_tasks || 0 }}</strong><span>分析</span></div>
-        <div><strong>{{ profile.task_counts?.payload || 0 }}</strong><span>载荷</span></div>
+      <div><strong>{{ profile.task_counts?.payload || 0 }}</strong><span>加密表征</span></div>
         <div><strong>{{ profile.task_counts?.motion || 0 }}</strong><span>时序</span></div>
       </div>
     </aside>

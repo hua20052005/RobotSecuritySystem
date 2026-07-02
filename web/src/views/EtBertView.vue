@@ -98,6 +98,7 @@ const summaryText = computed(() => {
 })
 
 const protoColors = { 'UDP': '#3b82f6', 'TCP': '#f97316', 'Other': '#9ca3af' }
+const protoLabels = { 'UDP': '数据报控制流', 'TCP': '会话控制流', 'Other': '其他流量' }
 
 const onModelSwitch = () => {
   result.value = null
@@ -250,7 +251,7 @@ const renderAll = () => {
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
       legend: { bottom: 0, textStyle: { fontSize: 10 } },
       series: [{ type: 'pie', radius: ['40%', '70%'],
-        data: pCats.map(k => ({ name: k, value: protoDist[k], itemStyle: { color: protoColors[k] || '#9ca3af' } })),
+        data: pCats.map(k => ({ name: protoLabels[k] || '其他流量', value: protoDist[k], itemStyle: { color: protoColors[k] || '#9ca3af' } })),
         label: { formatter: '{b}\n{d}%', fontSize: 10 } }],
     }, { notMerge: true })
   }
@@ -303,10 +304,10 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
 
 <template>
   <ModuleHero
-    objective="识别控制载荷中的异常指令、参数与通信模式"
-    input="PCAP / PCAPNG 载荷流量"
+    objective="识别加密控制流量中的异常指令表征与通信模式"
+    input="PCAP / PCAPNG 加密流量"
     output="异常类别、置信度与样本证据"
-    scenario="控制链路内容审计"
+    scenario="加密控制链路内容模式检测"
   />
   <SectionBlock
     title="检测配置"
@@ -344,7 +345,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
           <el-input-number v-model="maxPackets" :min="100" :step="500" :max="50000" />
         </label>
         <div class="config-note">
-          <strong>{{ modelMode === 'packet' ? '逐包识别异常载荷' : '按连续 32 包恢复流级上下文' }}</strong>
+              <strong>{{ modelMode === 'packet' ? '逐包识别异常内容模式' : '按连续 32 包恢复流级上下文' }}</strong>
           <span>模型切换不会改变原始抓包文件。</span>
         </div>
         <div class="action-row">

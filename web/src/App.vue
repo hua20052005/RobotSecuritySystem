@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item @click="router.push('/profile')">账户设置</el-dropdown-item>
-                <el-dropdown-item @click="router.push('/history')">审计历史</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/history')">检测记录</el-dropdown-item>
                 <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -168,7 +168,7 @@ onBeforeUnmount(() => {
     <div class="auth-head">
       <div>
         <h2>{{ authMode === 'login' ? '登录' : '注册' }}</h2>
-        <p>{{ authMode === 'login' ? '进入本地审计控制台' : '创建一个审计账户' }}</p>
+        <p>{{ authMode === 'login' ? '进入 RoboGuard 本地控制台' : '创建系统账户' }}</p>
       </div>
       <button type="button" aria-label="关闭" @click="authVisible = false">×</button>
     </div>

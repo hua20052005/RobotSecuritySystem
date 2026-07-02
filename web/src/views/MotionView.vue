@@ -203,7 +203,7 @@ const renderTransitionCharts = () => {
         data: transitions.value.map((item) => ({
           value: Number(item.risk || 0),
           itemStyle: {
-            color: item.decision === 'ANOMALY' ? '#c6454f' : item.decision === 'DEVIATION' ? '#c56a22' : '#345d9d',
+            color: item.decision === 'ANOMALY' ? '#c6454f' : item.decision === 'DEVIATION' ? '#c56a22' : '#176f68',
             borderRadius: [3, 3, 0, 0],
           },
         })),
@@ -608,7 +608,7 @@ const exportJson = () => {
     </div>
   </section>
 
-  <SectionBlock v-if="result" title="审计证据" description="按审计步骤查看识别片段、判定依据、转移风险和正常模板。" class="fade-in">
+  <SectionBlock v-if="result" title="检测证据" description="按分析步骤查看识别片段、判定依据、转移风险和正常模板。" class="fade-in">
     <el-tabs v-model="activeTab" class="audit-tabs">
       <el-tab-pane label="时间线概览" name="overview" />
       <el-tab-pane :label="`识别与依据 (${segments.length}/${evidenceRows.length})`" name="details" />

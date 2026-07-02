@@ -33,7 +33,7 @@ const states = reactive({
 
 const dimensions = [
   { key: 'side', label: '侧信道', description: '连接与元数据', icon: DataAnalysis },
-  { key: 'payload', label: '载荷检测', description: '内容与语义', icon: Lock },
+  { key: 'payload', label: '加密表征检测', description: '内容模式与语义表征', icon: Lock },
   { key: 'motion', label: '动作时序', description: '行为与流程', icon: Connection },
 ]
 
@@ -164,7 +164,7 @@ const requestDimension = async (key) => {
     const detail = error.response?.data?.detail || error.message || '检测失败'
     states[key].technicalError = typeof detail === 'string' ? detail : JSON.stringify(detail)
     states[key].error = key === 'payload'
-      ? '载荷检测暂不可用（模型文件或运行环境未就绪）'
+      ? '加密表征检测暂不可用（模型文件或运行环境未就绪）'
       : `${dimensions.find((item) => item.key === key)?.label || '该维度'}无法运行`
   } finally {
     states[key].elapsed = Math.round(performance.now() - startedAt)
@@ -216,10 +216,10 @@ const toggleDimension = (key) => {
 
 <template>
   <ModuleHero
-    objective="从通信连接、载荷内容和动作流程三个维度形成统一风险结论"
+    objective="从连接侧信道、加密流量表征和动作流程三个维度形成统一风险结论"
     input="一份机器人控制链路 PCAP"
     output="统一状态、分维指标与完整证据 JSON"
-    scenario="比赛演示、现场排查与综合审计"
+    scenario="比赛演示、现场排查与综合分析"
   />
 
   <SectionBlock title="统一检测入口" description="上传一次抓包，选择轮盘中的检测维度并并行运行。" class="fade-in">
@@ -234,7 +234,7 @@ const toggleDimension = (key) => {
         />
         <div class="unified-options">
           <label class="control-field">
-            <span>载荷检测粒度</span>
+          <span>加密表征检测粒度</span>
             <el-segmented v-model="payloadMode" :options="[{ label: '包级', value: 'packet' }, { label: '流级', value: 'flow' }]" />
           </label>
           <label class="control-field">

@@ -21,6 +21,9 @@ ROBOT_ROOT = "/opt/robot_security"
 SYSTEM_ROOT = f"{ROBOT_ROOT}/github_RobotSecuritySystem"
 PYTHON = f"{ROBOT_ROOT}/.venv/bin/python"
 LOG_ROOT = f"{ROBOT_ROOT}/logs"
+PACKET_ROOT = "/home/ysc/packet"
+FIREWALL_CHAIN = "JUEYING_FW"
+NORMAL_CONTROLLER_IP = "192.168.2.67"
 
 PROCESS_PATTERNS = {
     # Bracketed expressions match the target process without matching pgrep/pkill itself.
@@ -28,12 +31,15 @@ PROCESS_PATTERNS = {
     "payload_bridge": "[e]tbert_payload_bridge.py",
     "side_bridge": "[s]ide_channel_realtime_bridge.py",
     "proxy": "[u]dp_defense_proxy.py",
+    "connection_firewall": "[u]dp_firewall.py",
 }
 LOG_FILES = {
     "transparent": f"{LOG_ROOT}/udp_proxy_only.log",
     "defense": f"{LOG_ROOT}/udp_defense_proxy.log",
     "detection": "/tmp/robot_detection_results.jsonl",
     "services": f"{LOG_ROOT}/etbert_api.log",
+    "firewall": f"{PACKET_ROOT}/firewall.log",
+    "firewall_console": f"{PACKET_ROOT}/firewall_console.log",
 }
 REQUIRED_FILES = {
     "proxy": f"{ROBOT_ROOT}/udp_defense_proxy.py",
@@ -42,6 +48,8 @@ REQUIRED_FILES = {
     "command_sender": f"{ROBOT_ROOT}/send_robot_udp_command.py",
     "etbert_app": f"{SYSTEM_ROOT}/backend/etbert_api/main.py",
     "python": PYTHON,
+    "connection_firewall": f"{PACKET_ROOT}/udp_firewall.py",
+    "packet_sniffer": f"{PACKET_ROOT}/udp_mitm_sniffer.py",
 }
 
 
@@ -58,7 +66,7 @@ class TestCommandRequest(DefenseConnection):
 
 
 class LogRequest(DefenseConnection):
-    log: Literal["transparent", "defense", "detection", "services"] = "defense"
+    log: Literal["transparent", "defense", "detection", "services", "firewall", "firewall_console"] = "defense"
     lines: int = Field(default=80, ge=10, le=300)
 
 
@@ -102,7 +110,8 @@ def _run(client, command: str, timeout: int = 15) -> Dict[str, object]:
         output = stdout.read().decode("utf-8", errors="replace").strip()
         error = stderr.read().decode("utf-8", errors="replace").strip()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"远程命令执行失败：{exc}") from exc
+        detail = str(exc).strip() or type(exc).__name__
+        raise HTTPException(status_code=502, detail=f"远程命令执行失败：{detail}") from exc
     return {"ok": code == 0, "code": code, "stdout": output, "stderr": error}
 
 
@@ -110,6 +119,13 @@ def _require_ok(result: Dict[str, object], message: str) -> None:
     if not result["ok"]:
         detail = result["stderr"] or result["stdout"] or message
         raise HTTPException(status_code=500, detail=f"{message}：{detail}")
+
+
+def _run_stage(client, command: str, stage: str, timeout: int = 15) -> Dict[str, object]:
+    try:
+        return _run(client, command, timeout=timeout)
+    except HTTPException as exc:
+        raise HTTPException(status_code=exc.status_code, detail=f"{stage}：{exc.detail}") from exc
 
 
 def _tail(client, *paths: str, lines: int = 40) -> str:
@@ -128,6 +144,41 @@ def _background_bash(command: str, log_path: str) -> str:
         f"nohup /bin/bash -lc {shlex.quote(shell_command)} "
         f">{shlex.quote(log_path)} 2>&1 </dev/null &"
     )
+
+
+def _sudo_shell(password: str, command: str) -> str:
+    return (
+        f"printf '%s\\n' {shlex.quote(password)} | "
+        f"sudo -S -p '' /bin/bash -lc {shlex.quote(command)}"
+    )
+
+
+def _sudo_background(password: str, command: str) -> str:
+    return (
+        "setsid_path=$(command -v setsid) || "
+        "{ echo 'setsid command not found' >&2; exit 127; }; "
+        f"printf '%s\\n' {shlex.quote(password)} | "
+        f"sudo -S -p '' \"$setsid_path\" -f /bin/bash -lc {shlex.quote(command)}"
+    )
+
+
+def _stop_connection_firewall(client, password: str) -> None:
+    cleanup = (
+        f"pkill -TERM -f {shlex.quote(PROCESS_PATTERNS['connection_firewall'])} >/dev/null 2>&1 || true; "
+        "sleep 1; "
+        "for attempt in 1 2 3 4 5; do "
+        f"iptables -D INPUT -p udp --dport 43893 -j {FIREWALL_CHAIN} >/dev/null 2>&1 || break; "
+        "done; "
+        f"iptables -F {FIREWALL_CHAIN} >/dev/null 2>&1 || true; "
+        f"iptables -X {FIREWALL_CHAIN} >/dev/null 2>&1 || true"
+    )
+    result = _run_stage(
+        client,
+        _sudo_shell(password, cleanup),
+        "阶段 1/4 清理旧防火墙与 iptables 规则",
+        timeout=12,
+    )
+    _require_ok(result, "清理异常连接防火墙失败")
 
 
 def _wait_for(client, condition: str, timeout_seconds: int, message: str, *log_paths: str) -> None:
@@ -180,7 +231,9 @@ def _status(client) -> Dict[str, object]:
         result = _run(client, f"pgrep -af {shlex.quote(PROCESS_PATTERNS['proxy'])} | head -n 1")
         proxy_command = str(result["stdout"])
     mode = "stopped"
-    if services["proxy"]:
+    if services["connection_firewall"]:
+        mode = "firewall"
+    elif services["proxy"]:
         mode = "transparent" if "--transparent-forward" in proxy_command else "defense"
     required = ("etbert_api", "payload_bridge", "side_bridge", "proxy")
     readiness = "stopped"
@@ -188,6 +241,8 @@ def _status(client) -> Dict[str, object]:
         readiness = "complete" if ports["udp_43894"] else "degraded"
     elif mode == "defense":
         readiness = "complete" if all(services[name] for name in required) and ports["udp_43894"] else "degraded"
+    elif mode == "firewall":
+        readiness = "complete" if services["connection_firewall"] else "degraded"
     return {
         "services": services,
         "ports": ports,
@@ -225,6 +280,7 @@ def start_transparent(payload: DefenseConnection) -> Dict[str, object]:
             files = _check_files(client)
             if not files["proxy"] or not files["python"]:
                 raise HTTPException(status_code=409, detail="机器狗缺少 udp_defense_proxy.py 或虚拟环境 Python")
+            _stop_connection_firewall(client, payload.ssh_password)
             _run(client, _stop_command())
             _run(
                 client,
@@ -266,6 +322,7 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
             if missing:
                 raise HTTPException(status_code=409, detail=f"机器狗缺少防御组件：{', '.join(missing)}")
 
+            _stop_connection_firewall(client, payload.ssh_password)
             _run(client, _stop_command())
             _require_ok(_run(client, f"mkdir -p {LOG_ROOT} {ROBOT_ROOT}/tmp/robot_payload_batches"), "创建运行目录失败")
             _require_ok(
@@ -382,12 +439,93 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
             client.close()
 
 
+@router.post("/start-firewall")
+def start_connection_firewall(payload: DefenseConnection) -> Dict[str, object]:
+    with _LOCK:
+        client = _connect(payload)
+        try:
+            files = _check_files(client)
+            if not files["connection_firewall"]:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"机器狗缺少 {PACKET_ROOT}/udp_firewall.py，请先完成部署",
+                )
+            if not files["python"]:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"机器狗缺少可用解释器 {PYTHON}",
+                )
+            _run(client, _stop_command())
+            _stop_connection_firewall(client, payload.ssh_password)
+            prepare = (
+                f"mkdir -p {PACKET_ROOT}; "
+                f": > {PACKET_ROOT}/firewall.log; "
+                f": > {PACKET_ROOT}/firewall_console.log"
+            )
+            _require_ok(
+                _run_stage(
+                    client,
+                    _sudo_shell(payload.ssh_password, prepare),
+                    "阶段 2/4 准备防火墙日志",
+                ),
+                "准备异常连接防火墙日志失败",
+            )
+            firewall_command = (
+                f"cd {PACKET_ROOT} && "
+                f"exec {PYTHON} {PACKET_ROOT}/udp_firewall.py "
+                f"--allow-ip {NORMAL_CONTROLLER_IP} "
+                f"--log-file {PACKET_ROOT}/firewall.log "
+                f">{PACKET_ROOT}/firewall_console.log 2>&1 </dev/null"
+            )
+            _require_ok(
+                _run_stage(
+                    client,
+                    _sudo_background(payload.ssh_password, firewall_command),
+                    "阶段 3/4 创建独立 root 防火墙会话",
+                    timeout=15,
+                ),
+                "异常连接防火墙启动命令失败",
+            )
+            _wait_for(
+                client,
+                f"pgrep -f {shlex.quote(PROCESS_PATTERNS['connection_firewall'])} >/dev/null",
+                8,
+                "异常连接防火墙进程未保持运行",
+                f"{PACKET_ROOT}/firewall_console.log",
+            )
+            rule_check = (
+                f"iptables -C INPUT -p udp --dport 43893 -j {FIREWALL_CHAIN} "
+                ">/dev/null 2>&1"
+            )
+            _require_ok(
+                _run_stage(
+                    client,
+                    _sudo_shell(payload.ssh_password, rule_check),
+                    "阶段 4/4 检查 iptables INPUT 引用",
+                ),
+                "异常连接防火墙进程已启动，但 iptables 规则未生效",
+            )
+            return {
+                "message": "异常连接识别防御已启动，异常来源将被实时拦截",
+                **_status(client),
+            }
+        except HTTPException:
+            try:
+                _stop_connection_firewall(client, payload.ssh_password)
+            except HTTPException:
+                pass
+            raise
+        finally:
+            client.close()
+
+
 @router.post("/stop")
 def stop_defense(payload: DefenseConnection) -> Dict[str, object]:
     with _LOCK:
         client = _connect(payload)
         try:
             _run(client, _stop_command())
+            _stop_connection_firewall(client, payload.ssh_password)
             return {"message": "实验进程已停止", **_status(client)}
         finally:
             client.close()

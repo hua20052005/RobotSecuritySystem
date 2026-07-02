@@ -108,7 +108,7 @@ onMounted(loadTasks)
 </script>
 
 <template>
-  <SectionBlock title="历史审计任务" description="按模块、日期和关键词检索任务，点击任意记录打开证据详情。" class="fade-in">
+  <SectionBlock title="历史检测任务" description="按模块、日期和关键词检索任务，点击任意记录打开证据详情。" class="fade-in">
     <div class="history-toolbar">
       <el-tabs v-model="moduleFilter" class="history-tabs">
         <el-tab-pane label="全部" name="" />
