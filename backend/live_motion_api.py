@@ -26,6 +26,7 @@ from backend.motion_recognition_api import (
     _action_labels,
     _load_papb_validator,
     _load_recognition_model,
+    _publicize_recognition,
 )
 from robot_traffic_action.motion import predict_action_sequence
 
@@ -74,6 +75,8 @@ class LiveConfig:
         value = asdict(self)
         value.pop("ssh_password", None)
         value.pop("sudo_password", None)
+        if value.get("method") == "command":
+            value["method"] = "trusted_control_events"
         return value
 
 
@@ -331,9 +334,10 @@ class LiveMotionManager:
             )
 
         run_id = f"live-{uuid.uuid4().hex[:10]}"
+        public_recognition = _publicize_recognition(recognition)
         summary = {
             "mode": "sequence",
-            "method": config.method,
+            "method": "trusted_control_events" if config.method == "command" else config.method,
             "label_count": len(actions),
             "labels": actions,
             "window_labels": window_labels,
@@ -345,7 +349,7 @@ class LiveMotionManager:
             "run_id": run_id,
             "filename": "live-capture.pcap",
             "summary": summary,
-            "recognition": recognition,
+            "recognition": public_recognition,
             "actions": actions,
             "flow_validation": papb_result,
             "model_path": str(MODEL_PATH),
@@ -416,7 +420,7 @@ def _config_from_payload(payload: LiveStartRequest, module: str) -> LiveConfig:
     if scenario not in ALLOWED_SCENARIOS:
         raise HTTPException(status_code=400, detail="不支持的任务场景")
     if payload.method != "command":
-        raise HTTPException(status_code=400, detail="实时动作监测当前仅支持 command 识别方式")
+        raise HTTPException(status_code=400, detail="实时动作监测当前仅支持可信控制流事件提取方式")
     if payload.model_mode not in {"packet", "flow"}:
         raise HTTPException(status_code=400, detail="model_mode 必须为 packet 或 flow")
     return LiveConfig(

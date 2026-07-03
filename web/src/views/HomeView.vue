@@ -27,7 +27,7 @@ const modules = [
   },
   {
     title: '加密流量表征检测',
-    description: '使用 ET-BERT 双粒度模型识别加密流量中的异常模式。',
+    description: '通过双粒度载荷接口识别内容模式异常，并支持模型不可用时显式降级。',
     route: '/payload',
     icon: Lock,
     tone: 'coral',
@@ -66,7 +66,7 @@ const modules = [
         <span class="hero-kicker"><i></i> Robot traffic intelligence</span>
         <h1>RoboGuard</h1>
         <p class="hero-product-title">面向具身智能控制链路的安全防御系统</p>
-        <p>融合连接侧信道、加密流量表征与动作时序分析，从原始流量发现风险并联动实时防御。</p>
+        <p>融合连接侧信道、载荷表征与动作时序分析，从原始流量发现风险并进入受控处置流程。</p>
         <div class="hero-actions">
           <el-button type="primary" size="large" @click="router.push('/unified-analysis')">
             三维统一分析
@@ -78,7 +78,7 @@ const modules = [
 
       <div class="hero-status">
         <span class="status-pulse"></span>
-        <div><strong>检测节点已就绪</strong><small>Local defense pipeline</small></div>
+        <div><strong>本地分析工作台</strong><small>模块状态进入工作台后实时检查</small></div>
       </div>
     </section>
 
@@ -114,8 +114,8 @@ const modules = [
       <span class="defense-entry-icon"><el-icon><SetUp /></el-icon></span>
       <div>
         <span>主动防御控制平面</span>
-        <h2>从发现风险，到实时拦截</h2>
-        <p>连接机器狗后编排检测桥接与控制链路防御代理，切换透明转发或完整防御，并查看实时处置日志。</p>
+        <h2>从发现风险，到受控处置</h2>
+        <p>连接机器狗后编排检测桥接与控制链路防御代理，对比透明转发与防御模式，并查看实际运行日志。</p>
       </div>
       <el-button size="large" type="primary" @click="router.push('/defense')">
         进入防御控制台

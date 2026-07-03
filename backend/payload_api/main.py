@@ -106,11 +106,16 @@ def health() -> Dict[str, object]:
         if not etbert_models[key]
     ]
     etbert_ready = etbert_app is not None and not missing_models
+    ensemble_ready = DEFAULT_ENSEMBLE.is_file() and SCRIPT_PATH.is_file()
+    payload_ready = etbert_ready or ensemble_ready
     return {
         "status": "ok",
         "service": "payload-backend",
         "etbert_available": etbert_ready,
         "etbert_models": etbert_models,
+        "ensemble_fallback_available": ensemble_ready,
+        "payload_available": payload_ready,
+        "payload_engine": "etbert" if etbert_ready else "ensemble_fallback" if ensemble_ready else None,
         "etbert_error": ETBERT_IMPORT_ERROR
         or (
             f"missing model files: {', '.join(missing_models)}"

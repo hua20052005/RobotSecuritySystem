@@ -1,506 +1,283 @@
-# RobotSecuritySystem - 机器人安全检测系统
+# RoboGuard
 
-一个综合性的网络安全检测平台，包含侧通道分析、载荷检测、运动识别等多项检测能力，支持前后端分离的架构。
+面向具身智能控制链路的安全分析与受控防御系统。
 
-## 📋 项目概览
+RoboGuard 从机器人控制流量中组织三类互补证据：
 
-### 核心功能
+1. **侧信道流量分析**：基于包长、方向、端口、到达间隔和连接画像发现离群通信。
+2. **载荷表征检测**：提供包级/流级检测接口；优先使用 ET-BERT 微调权重，权重未安装时自动切换到兼容集成模型。
+3. **动作时序分析**：从可信控制流的稳定结构和连续活动区间恢复动作事件，再由 PAPB 判断动作顺序、重复次数和任务场景是否合理。
 
-| 功能模块 | 描述 | 主要文件 |
-|---------|------|--------|
-| **侧通道分析** | 基于 IsolationForest 的网络流量异常检测 | `backend/side_channel_api.py` |
-| **载荷检测** | 通过特征工程和机器学习检测恶意载荷 | `payload-detection/` |
-| **运动识别** | 基于 PCAP 包的运动模式识别 | `motion/` |
-| **任务管理** | 后台任务调度和执行 | `backend/tasks_api.py` |
-| **AI 报告** | 自动生成检测分析报告 | `backend/ai_report.py` |
-| **身份认证** | 用户认证和授权管理 | `backend/auth.py`, `backend/auth_api.py` |
+系统使用 Vue 3 + FastAPI 构建 Web 工作台，并提供实时旁路采集、分维证据展示、透明转发对照、检测代理、连接白名单防火墙、历史审计和结果导出。
 
-### 架构概览
+> 项目定位：RoboGuard 不以完整逆向任意闭源协议为前提，也不把低概率转移直接等同于攻击。系统强调可解释证据、明确异常与未知流程分离，以及人工审核后的受控更新。
 
+## 1. 当前实现状态
+
+| 模块 | 当前能力 | 运行边界 |
+|---|---|---|
+| 侧信道分析 | IsolationForest、连接画像、异常包与二次研判 | 统计离群不天然等于攻击，需要结合业务证据复核 |
+| 载荷检测 | 包级/流级接口、ET-BERT 可选接入、兼容集成模型回退 | 本上传包不包含大型 ET-BERT 微调权重，默认使用回退引擎 |
+| 动作语义 | 稳定控制片段去重、连续活动区间聚合、动作时间线 | 依赖当前设备上可重复观察的控制流结构，不宣称通用于任意设备 |
+| PAPB | 模板对齐、编辑距离容错、任务图、转移风险、重复与场景硬规则 | 低概率主要用于解释；明确硬规则才触发异常告警 |
+| 统一分析 | 三维并行调度、独立错误隔离、统一状态与 JSON 证据 | 属于规则化状态关联，不是已训练的端到端融合模型 |
+| 实时采集 | SSH + `tcpdump` 滚动采集，并送入三个检测模块 | 需要后端主机能够访问机器人 SSH 环境 |
+| 受控防御 | 透明转发、检测代理、连接防火墙、日志回读和安全测试动作 | 仅用于已授权、隔离环境；实体动作必须执行现场安全确认 |
+| 审计更新 | 任务历史、结果导出、PAPB 待审池和显式重训练 | 未经人工确认的未知流程不会自动修改正常基线 |
+
+## 2. 已验证的数据基础
+
+- 单动作 PCAP：131 个；
+- 动作序列 PCAP：65 条；
+- 人工标注动作事件：266 个；
+- 0630 场景挑战集：10 条，其中 9 条规则异常、1 条正常。
+
+动作语义路径当前结果：
+
+- 单动作语义覆盖：118/131（90.1%）；
+- 覆盖范围内识别正确：112/118（94.9%）；
+- 65 条序列完整匹配：40/65（61.5%）；
+- 65 条序列平均相似度：87.5%；
+- 0629 与 0630 两个近期独立批次：20/23 完整匹配，平均相似度 97.0%；
+- 0630 挑战集接入 PAPB 后：10/10 场景规则判定正确。
+
+上述结果用于说明当前数据和已覆盖场景下的实现效果，不代表对任意机器人、任意未知攻击或长期生产环境的普适性能。
+
+## 3. 系统架构
+
+```text
+控制链路 PCAP / 实时旁路流量
+            │
+            ├── 侧信道特征分析 ────────┐
+            ├── 载荷表征检测 ──────────┼── 统一状态与结构化证据
+            └── 动作事件恢复 → PAPB ───┘
+                                         │
+                    Web 展示 / 历史审计 / 受控处置
 ```
-RobotSecuritySystem
-├── 前端
-│   ├── Vue 3 + Vite (web/)              新版前后端分离
-│   └── Streamlit (app.py, pages/)       旧版兼容入口
-│
-├── 后端 (FastAPI)
-│   ├── 侧通道分析 API
-│   ├── 载荷检测 API
-│   ├── 运动识别 API
-│   ├── 任务管理 API
-│   └── 认证系统
-│
-└── 核心模块
-    ├── 特征工程
-    ├── 异常检测
-    └── 数据库管理
-```
 
----
+主要目录：
 
-## 📁 项目结构详解
-
-```
+```text
 RobotSecuritySystem/
-│
-├── app.py                           # Streamlit 主入口
-├── requirements.txt                 # 项目依赖
-├── README.md                        # 本文档
-│
-├── web/                             # 前端 (Vue 3 + Vite)
-│   ├── src/
-│   │   ├── App.vue                  # 主应用组件
-│   │   ├── main.js                  # 启动文件
-│   │   ├── api/                     # API 调用模块
-│   │   ├── components/              # UI 组件库
-│   │   ├── router/                  # 路由配置
-│   │   └── views/                   # 页面视图
-│   ├── package.json
-│   └── vite.config.js
-│
-├── backend/                         # 后端服务 (FastAPI)
-│   ├── __init__.py
-│   ├── auth.py                      # 认证逻辑
-│   ├── auth_api.py                  # 认证 API
-│   ├── db.py                        # 数据库连接
-│   ├── ai_report.py                 # AI 报告生成
-│   ├── side_channel_api.py          # 侧通道分析 API
-│   ├── motion_api.py                # 运动识别 API
-│   ├── tasks_api.py                 # 任务管理 API
-│   └── payload_api/                 # 载荷检测 API
-│       ├── __init__.py
-│       └── main.py                  # FastAPI 主应用
-│
-├── core/                            # 核心模块
-│   ├── detector.py                  # 异常检测器
-│   ├── feature_eng.py               # 特征工程
-│   └── payload_backend_bootstrap.py # 后端自启动
-│
-├── payload-detection/               # 载荷检测子系统
-│   ├── requirements.txt
-│   ├── config/                      # 配置文件
-│   │   ├── mlconfig.yaml
-│   │   └── inference_config.yaml
-│   ├── models/                      # 模型资产
-│   ├── modules/                     # 检测模块
-│   │   ├── feature.py               # 特征提取
-│   │   ├── parser.py                # 协议解析
-│   │   ├── tokenizer.py             # Token 化
-│   │   ├── rules_engine.py          # 规则引擎
-│   │   ├── inference/               # 推理模块
-│   │   ├── model/                   # 模型模块
-│   │   └── utils/                   # 工具函数
-│   ├── scripts/                     # 脚本工具
-│   │   ├── detect_from_pcap.py      # PCAP 检测
-│   │   ├── train.py                 # 模型训练
-│   │   ├── eval.py                  # 模型评估
-│   │   └── infer.py                 # 推理脚本
-│   └── data/                        # 数据集
-│       ├── datasets/
-│       ├── iocs/                    # 指标库
-│       └── protocols/               # 协议定义
-│
-├── motion/                          # 运动识别系统
-│   ├── motion/
-│   │   ├── inference.py             # 推理模块
-│   │   ├── model_motion_sequences.py # 运动模型
-│   │   ├── task_sequences_example.json
-│   │   ├── hello/                   # 测试数据
-│   │   ├── jump/
-│   │   ├── walk/
-│   │   ├── step/
-│   │   ├── scapy/
-│   │   └── outputs_motion_model*/   # 模型输出
-│   └── api_runs/                    # API 运行记录
-│
-├── pages/                           # Streamlit 多页面
-│   ├── 1_side_channel_analysis.py   # 侧通道分析页
-│   └── 2_payload_detection.py       # 载荷检测页
-│
-├── data/                            # 数据集目录
-│   ├── Backdoor_Malware.pcap
-│   ├── test_mixed.pcap
-│   ├── test.pcapng
-│   └── temp_upload.pcap
-│
-├── injector.py                      # 依赖注入
-├── _fix_theme.py                    # 主题修复
-└── [其他配置文件]
+├─ backend/                 FastAPI 接口、实时采集、认证、审计与防御编排
+├─ core/                    侧信道特征工程与基础检测器
+├─ web/                     Vue 3 前端
+├─ models/                  动作识别模型与稳定控制结构配置
+├─ motion/motion/           PAPB 模型、知识库与校验逻辑
+├─ payload-detection/       兼容载荷检测引擎及模型
+├─ ET-BERT-main/            ET-BERT 代码、配置和词表
+├─ deployment/robot/        机器人端防御与流量代理脚本
+├─ docs/                    部署与防御控制说明
+├─ tests/                   自动化测试
+├─ run_backend.py           后端启动入口
+└─ requirements.txt         Python 依赖
 ```
 
----
+## 4. 环境要求
 
-## 🔧 环境要求
+- Windows 10/11 或可运行 Python、Node.js 的 Linux 环境；
+- Python 3.10-3.12，推荐 Python 3.11；
+- Node.js 20+；
+- 实时采集与防御功能需要可 SSH 访问的机器人实验环境；
+- 仅进行离线 PCAP 分析时不需要连接机器人。
 
-- **操作系统**: Windows 10+ (或 Linux/macOS 需调整命令)
-- **Python**: 3.10 或更高版本（推荐 3.11）
-- **包管理**: pip / conda
-- **可选**: Wireshark/TShark (用于 PCAP 高级分析)
+## 5. 快速启动
 
-### 主要依赖库
-
-| 库 | 用途 |
-|----|------|
-| FastAPI / Uvicorn | 后端 Web 框架 |
-| Streamlit | 前端 UI 框架（旧版） |
-| Vue 3 / Vite | 前端框架（新版） |
-| NumPy / Pandas | 数据处理 |
-| Scikit-learn / XGBoost / LightGBM | 机器学习 |
-| Scapy / Pyshark | 网络包处理 |
-| PyTorch | 深度学习 |
-| Matplotlib / Seaborn | 可视化 |
-
----
-
-## 🚀 快速开始
-
-### 1️⃣ 创建虚拟环境（首次运行）
+若本机已经安装好 Python 依赖与前端依赖，可在项目根目录直接运行：
 
 ```powershell
-cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
-python -m venv venv
+.\start_local.cmd
 ```
 
-### 2️⃣ 激活虚拟环境
+停止服务：
 
 ```powershell
-.\venv\Scripts\Activate.ps1
+.\stop_local.cmd
 ```
 
-> 激活成功后，命令行前缀会显示 `(venv)`
+脚本会优先使用项目 `.venv`，其次尝试本机 Python 3.11；若 8010 已被占用，会自动切换到 8011，并让前端连接到实际后端端口。
 
-### 3️⃣ 安装所有依赖
+### 5.1 后端
 
 ```powershell
+cd RobotSecuritySystem
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install -r .\payload-detection\requirements.txt
+python -m pip install -r requirements.txt
+python run_backend.py
 ```
 
-### 4️⃣ 启动系统
+后端默认地址：
 
-
-#### **方案 B: 手动启动前后端分离（推荐新版）**
-
-**终端 1 - 启动后端**:
-```powershell
-python -m uvicorn backend.payload_api.main:app --host 127.0.0.1 --port 8010
+```text
+http://127.0.0.1:8010
 ```
 
-**终端 2 - 启动前端**:
+健康检查与接口文档：
+
+```text
+http://127.0.0.1:8010/health
+http://127.0.0.1:8010/docs
+```
+
+### 5.2 前端
+
+打开另一个终端：
+
 ```powershell
-cd web
-npm install
+cd RobotSecuritySystem\web
+npm ci
 npm run dev
 ```
 
-访问 `http://localhost:5173`（或 Vite 显示的地址）
+浏览器访问：
 
----
-
-## 📡 API 文档
-
-### 后端服务默认地址
-
-- **Payload API**: `http://127.0.0.1:8010`
-- **Swagger 文档**: `http://127.0.0.1:8010/docs`
-- **ReDoc 文档**: `http://127.0.0.1:8010/redoc`
-
-### 主要 API 端点
-
-| 端点 | 方法 | 功能 |
-|-----|------|------|
-| `/health` | GET | 健康检查 |
-| `/api/side-channel/analyze` | POST | 侧通道分析 |
-| `/api/payload/detect` | POST | 载荷检测 |
-| `/api/motion/recognize` | POST | 运动识别 |
-| `/api/tasks/` | GET/POST | 任务管理 |
-| `/api/auth/login` | POST | 用户登录 |
-
----
-
-## 📊 功能说明
-
-### 侧通道分析 (Side-Channel Analysis)
-
-- **用途**: 检测网络流量中的异常行为
-- **算法**: Isolation Forest
-- **输入**: PCAP 文件或网络流
-- **输出**: 异常分数、风险等级、详细报告
-
-### 载荷检测 (Payload Detection)
-
-- **用途**: 识别网络包中的恶意载荷
-- **方法**: 特征工程 + 多种机器学习模型
-- **支持模型**: XGBoost, LightGBM, 深度学习模型
-- **输出**: 检测结果、置信度、风险类别
-
-### 运动识别 (Motion Recognition)
-
-- **用途**: 基于行为特征识别机器人/设备运动模式
-- **支持**: 行走、跳跃、步进等运动类型
-- **算法**: 序列模型、RBM 等
-
----
-
-## 🛠️ 常见操作
-
-### 添加新的 PCAP 测试数据
-
-1. 将 `.pcap` 或 `.pcapng` 文件放入 `data/` 目录
-2. 在 UI 中选择文件进行分析
-3. 查看分析结果和报告
-
-### 训练新的载荷检测模型
-
-```powershell
-cd payload-detection
-python scripts/train_from_csv_improved.py --config config/mlconfig.yaml
+```text
+http://127.0.0.1:5173
 ```
 
-### 评估模型性能
-
-```powershell
-cd payload-detection
-python scripts/eval.py --model models/model.pkl --test-data data/datasets/test.csv
-```
-
-### 运行载荷检测脚本（命令行）
-
-```powershell
-cd payload-detection
-python scripts/detect_from_pcap.py --pcap data/sample.pcap
-```
-
----
-
-## 📝 配置文件
-
-### 主要配置位置
-
-| 文件 | 用途 |
-|-----|------|
-| `payload-detection/config/mlconfig.yaml` | ML 模型配置 |
-| `payload-detection/config/inference_config.yaml` | 推理配置 |
-| `payload-detection/consul/mlconfig.yaml` | Consul 配置 |
-
-### 环境变量
-
-创建 `.env` 文件（如需要）：
+如后端不在默认地址，可创建 `web/.env.local`：
 
 ```env
-DATABASE_URL=sqlite:///./test.db
-LOG_LEVEL=INFO
-DEBUG=False
-```
-
----
-
-## 🐛 故障排查
-
-### Q: 启动时提示"port 8010 already in use"
-
-```powershell
-# 查找占用 8010 端口的进程
-Get-NetTCPConnection -LocalPort 8010
-
-# 强制关闭（谨慎使用）
-Stop-Process -Id <PID> -Force
-```
-
-### Q: 依赖安装失败
-
-```powershell
-# 清理 pip 缓存
-pip cache purge
-
-# 重新安装
-pip install --no-cache-dir -r requirements.txt
-```
-
-### Q: Streamlit 启动但无法自动启动后端
-
-检查 `core/payload_backend_bootstrap.py` 中的健康检查逻辑，确保后端路径正确。
-
-### Q: PCAP 文件无法解析
-
-- 确认文件格式为 `.pcap` 或 `.pcapng`
-- 检查 Scapy 是否正确安装
-- 可选：安装 TShark 提升解析能力
-
----
-
-## 📚 开发指南
-
-### 项目 Git 分支策略
-
-- `main`: 稳定发布版本
-- `dev`: 开发分支
-- `feature/*`: 功能开发分支
-
-### 代码规范
-
-- Python: PEP 8
-- JavaScript/Vue: ESLint + Prettier
-- 提交前运行 `black` 格式化
-
-### 添加新 API
-
-1. 在 `backend/` 中创建新模块
-2. 使用 FastAPI 装饰器定义路由
-3. 在 `backend/payload_api/main.py` 中注册路由
-4. 编写单元测试
-
----
-
-## 📄 文档参考
-
-- **Payload 检测**: 见 `payload-detection/README.md`
-- **运动识别**: 见 `motion/README.md` (如存在)
-- **API 文档**: `http://127.0.0.1:8010/docs`
-
----
-
-## 📧 技术支持
-
-- 项目位置: `D:\桌面\study\信安赛\RobotSecuritySystem - 副本`
-- 遇到问题请检查项目 wiki 或提交 issue
-
----
-
-**最后更新**: 2026 年 5 月
-
-浏览器访问：
-
-- http://localhost:8501
-
-### 3.5 启动新版前后端（推荐）
-
-先启动 FastAPI 后端：
-
-~~~powershell
-cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
-.\venv\Scripts\Activate.ps1
-python -m uvicorn backend.payload_api.main:app --host 127.0.0.1 --port 8010
-~~~
-
-再启动 Vue 前端：
-
-~~~powershell
-cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本\web
-npm install
-npm run dev
-~~~
-
-浏览器访问：
-
-- http://localhost:5173
-
-如需修改后端地址，请在 `web/.env` 设置：
-
-~~~text
 VITE_API_BASE_URL=http://127.0.0.1:8010
-~~~
+```
 
-首页将展示顶端导航与两个功能入口：
+## 6. 页面与功能
 
-- 首页
-- 侧信道分析
-- 通信包载荷检测
+| 路由 | 页面 | 功能 |
+|---|---|---|
+| `/` | 系统总览 | 三类检测模块与受控防御入口 |
+| `/unified-analysis` | 三维统一分析 | 一次上传、分维并行检测、故障隔离和统一证据 |
+| `/side-channel` | 侧信道流量分析 | 文件/实时分析、连接画像、异常包和二次研判 |
+| `/payload` | 载荷表征检测 | 包级/流级检测、引擎标识、类别分布和报告导出 |
+| `/motion` | 动作序列分析 | 动作事件恢复、时间线、PAPB 校验和模板解释 |
+| `/defense` | 系统集成防御 | 透明对照、检测代理、连接防火墙与日志回读 |
+| `/history` | 检测记录 | 登录用户的任务筛选、详情复核和导出 |
+| `/profile` | 账户设置 | 本地账户资料与任务统计 |
 
-页面切换方式：
+## 7. 载荷检测引擎
 
-- 顶部导航栏（首页 / 侧信道分析 / 通信包载荷检测）
-- 首页功能入口按钮
+系统按以下顺序选择载荷引擎：
 
-说明：默认侧边页面导航已关闭，两个功能页仅保留侧边控制面板。
+1. 若存在 ET-BERT 微调权重，使用对应包级或流级模型；
+2. 若权重缺失，自动使用 `payload-detection/models/ensemble_classifier_improved.pkl`；
+3. 若两种模型均不可用，健康接口返回 `payload_available=false`，统一分析保留其他维度结果。
+
+可选 ET-BERT 权重位置：
+
+```text
+ET-BERT-main/models/packet_finetune.bin
+ET-BERT-main/models/flow_finetune.bin
+```
+
+大型权重默认不纳入仓库。放置权重后重新启动后端，并通过 `/health` 检查：
+
+```json
+{
+  "etbert_available": true,
+  "payload_available": true,
+  "payload_engine": "etbert"
+}
+```
+
+没有权重时，正常状态应为：
+
+```json
+{
+  "etbert_available": false,
+  "ensemble_fallback_available": true,
+  "payload_available": true,
+  "payload_engine": "ensemble_fallback"
+}
+```
+
+## 8. 动作语义与 PAPB
+
+动作序列页面默认使用“可信控制流事件提取”：
+
+- 对稳定控制片段执行事件去重；
+- 将连续控制活动聚合为具有起止时间的持续事件；
+- 将不同来源映射到统一动作标签空间；
+- 将动作序列送入 PAPB，但不使用流程规则强行修改上游标签。
+
+PAPB 输出：
+
+| 状态 | 含义 |
+|---|---|
+| `NORMAL` | 符合已知流程且未违反硬规则 |
+| `NORMAL_WITH_TOLERANCE` | 存在轻微、可容忍偏差 |
+| `UNKNOWN_VALIDITY` | 未命中模板但未触发硬规则，需要人工复核 |
+| `ANOMALY` | 命中重复越限、禁止衔接、场景约束或其他明确规则 |
+| `NOT_RUN` | 未获得可供流程校验的有效动作 |
+
+转移概率用于解释动作衔接的常见程度。低概率本身不直接等同于攻击。
+
+## 9. 实时采集与防御实验
+
+实时采集需要填写机器人地址、SSH 用户、监听网卡和认证信息。密码只用于本次请求，不应写入源码、配置文件或上传材料。
+
+防御控制台支持：
+
+- 检查远程脚本、运行环境、进程和端口；
+- 启动透明转发对照；
+- 启动检测桥接与 UDP 防御代理；
+- 启用来源白名单连接防火墙；
+- 发送固定安全测试动作；
+- 查看转发、检测、拦截和组件日志；
+- 停止进程并清理实验规则。
+
+机器人端部署说明：
+
+- [防御控制台说明](docs/DEFENSE_CONTROL.md)
+- [连接防火墙部署](docs/CONNECTION_FIREWALL_DEPLOYMENT.md)
+
+所有防御与实体动作测试必须在已授权、隔离且具备急停条件的环境中执行。
+
+## 10. 测试与构建
+
+后端语法检查：
+
+```powershell
+python -m compileall backend core motion
+```
+
+PAPB 测试：
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+前端生产构建：
+
+```powershell
+cd web
+npm ci
+npm run build
+```
+
+构建产物位于 `web/dist/`，不应提交到源码仓库。
+
+## 11. 上传与安全检查
+
+上传前确认以下内容未被打包：
+
+- `.venv/`、`node_modules/`、`web/dist/`；
+- `.env*`、密钥、SSH 密码和访问令牌；
+- `.db`、`.sqlite*` 等本地账户或任务数据库；
+- 临时 PCAP、运行日志、缓存和 API 中间结果；
+- 未获授权的大型模型权重或第三方数据集。
+
+仓库已经通过 `.gitignore` 排除上述常见运行产物。若需要提交数据集，应单独提供经过脱敏、具有明确授权和标签说明的数据包。
+
+## 12. 已知边界
+
+- 侧信道动作类别识别存在跨批次域偏移，当前更适合动作边界和可疑时段辅助判断；
+- 可信控制流动作恢复依赖当前设备上稳定复现的结构特征；
+- 0630 场景挑战集规模为 10 条，其 100% 结果仅说明当前规则覆盖了这些预设场景；
+- 统一分析是多模块编排与状态关联，不是训练完成的端到端多模态模型；
+- 长期连续运行、复杂网络环境和更多未知攻击仍需扩大测试。
 
 ---
 
-## 4. 使用说明
-
-### 4.1 主检测页面
-
-- 上传 `.pcap`
-- 选择特征维度
-- 点击开始审计
-- 查看异常散点图、重点目标和异常清单
-
-### 4.2 Payload-Detection 页面
-
-- 确认后端地址为 `http://127.0.0.1:8010`
-- 上传 `.pcap` 或 `.pcapng`
-- 点击开始执行载荷检测
-- 查看汇总指标、逐包预览
-- 可下载 CSV/JSON 结果
-
----
-
-## 5. 常见问题排查
-
-### Q1: 输入 `run app.py` 报错
-
-原因：`run` 不是 PowerShell 命令。
-
-正确命令：
-
-~~~powershell
-python -m streamlit run app.py
-~~~
-
-### Q2: Payload 页面一直在加载
-
-按顺序检查：
-
-1. 启动后看侧边栏后端状态，确认是否显示“已在运行/已自动启动”
-2. 页面后端地址是否正确（默认 `http://127.0.0.1:8010`）
-3. 上传文件是否过大（首次检测会更慢）
-4. 是否在同一个虚拟环境安装了两份依赖
-5. 若提示启动超时，检查 `uvicorn` 是否已安装、8010 端口是否被占用
-
-### Q3: Streamlit 提示 `use_container_width` 将弃用
-
-这是兼容性提示，不是致命错误，不影响当前使用。
-
-### Q4: 端口占用
-
-- 后端端口 `8010` 占用：换成 `8011` 启动，并在页面里同步改地址
-- 前端端口 `8501` 占用：Streamlit 启动时会提示新端口
-
----
-
-## 6. 结果输出位置
-
-Payload 后端的中间文件与结果默认写入：
-
-- `payload-detection/data/api_runs/`
-
-主要包含：
-
-- 上传的 pcap/pcapng 临时文件
-- 检测结果 CSV
-- 汇总 JSON
-
----
-
-## 7. 开发建议（可选）
-
-- 初学阶段建议先使用一个虚拟环境，跑通全流程后再拆分双环境
-- 提交前建议清理大体积临时输出文件
-- 若要做双后端完全隔离，可继续把主检测逻辑也抽成 FastAPI 服务
-
----
-
-## 8. 最小可运行命令清单
-
-### 单终端启动（前端 + 自动后端）
-
-~~~powershell
-cd D:\桌面\study\信安赛\RobotSecuritySystem - 副本
-.\venv\Scripts\Activate.ps1
-python -m streamlit run app.py
-~~~
-
-运行后打开：
-
-- http://localhost:8501
+RoboGuard 用可解释的网络证据连接通信异常、动作语义和任务流程：能明确判断的给出依据，证据不足的进入待审，只有人工确认后才更新正常知识库。

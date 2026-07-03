@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import sys
 import tempfile
 import uuid
@@ -75,6 +76,31 @@ def _action_labels(sequence_result: Dict[str, object]) -> list[str]:
         if label:
             labels.append(label)
     return labels
+
+
+def _publicize_recognition(sequence_result: Dict[str, object]) -> Dict[str, object]:
+    """Expose semantic evidence names without leaking device-specific decoder labels."""
+    result = copy.deepcopy(sequence_result)
+    value_map = {
+        "controller_command": "trusted_control_event_extraction",
+        "controller_command_with_joystick": "trusted_control_event_extraction",
+        "fixed_command": "stable_control_fragment",
+        "fixed_signature": "stable_control_fragment",
+        "joystick_0x30_0x31": "continuous_control_activity",
+        "NO_COMMAND_MAP": "NO_TRUSTED_EVENT_MAP",
+        "NO_COMMAND_EVENTS": "NO_TRUSTED_EVENTS",
+    }
+
+    def replace_values(value):
+        if isinstance(value, dict):
+            return {key: replace_values(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [replace_values(item) for item in value]
+        if isinstance(value, str):
+            return value_map.get(value, value)
+        return value
+
+    return replace_values(result)
 
 
 @router.get("/health")
@@ -155,9 +181,11 @@ def recognize_motion_file(
                 scenario=scenario,
             )
 
+    public_method = "trusted_control_events" if method == "command" else method
+    public_recognition = _publicize_recognition(recognition)
     summary = {
         "mode": mode,
-        "method": method if mode == "sequence" else "single",
+        "method": public_method if mode == "sequence" else "single",
         "label_count": len(labels),
         "labels": labels,
         "scenario": scenario,
@@ -168,7 +196,7 @@ def recognize_motion_file(
         "run_id": run_id,
         "filename": file.filename,
         "summary": summary,
-        "recognition": recognition,
+        "recognition": public_recognition,
         "actions": labels,
         "flow_validation": papb_result,
         "model_path": str(MODEL_PATH),

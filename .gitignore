@@ -54,6 +54,10 @@ payload-detection/data/datasets/
 payload-detection/data/api_runs/
 core/api_runs/
 backend/api_runs/
+data/etbert_runs/
+runtime_logs/
+.unified-test/
+inference_results.json
 # ============================================================
 #  运动识别训练数据 & 模型输出（PCAP 过大 / 临时产物）
 # ============================================================
@@ -69,7 +73,10 @@ motion/0615
 #  运行产物 / 日志 / 临时结果
 # ============================================================
 *.log
+.runlogs/
 results_windowed/
 *.bin
 *.bin
 ET-BERT-main/models/
+!ET-BERT-main/models/bert_base_config.json
+!ET-BERT-main/models/encryptd_vocab.txt

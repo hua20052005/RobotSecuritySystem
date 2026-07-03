@@ -81,6 +81,9 @@ const summaryText = computed(() => {
   const normal = total - abnormal
   const abnormalRatio = r.abnormal_ratio || 0
   const modelLabel = r.model_type === 'packet' ? '包级' : '流级'
+  const engineLabel = r.engine === 'ensemble_fallback'
+    ? '兼容载荷引擎'
+    : 'ET-BERT'
   const lowConf = r.low_confidence_count || 0
 
   // 找出异常最多的类型
@@ -89,12 +92,12 @@ const summaryText = computed(() => {
   const topList = topAbnormal.slice(0, 3).map(([k, v]) => `${k}(${v}个)`).join('、')
 
   let level = '正常', levelColor = '#22c55e', advice = ''
-  if (abnormalRatio > 20) { level = '高危', levelColor = '#ef4444'; advice = '建议立即对该控制链路进行断网隔离，并排查异常来源。' }
+  if (abnormalRatio > 20) { level = '高危', levelColor = '#ef4444'; advice = '建议立即复核异常证据，并在确认后启用受控隔离或代理阻断策略。' }
   else if (abnormalRatio > 5) { level = '可疑', levelColor = '#f97316'; advice = '建议对异常包进行回溯分析，确认是否为攻击行为。' }
   else if (abnormalRatio > 0) { level = '低风险', levelColor = '#eab308'; advice = '少量异常包可能来源于操控噪声或环境干扰，建议持续监控。' }
   else { level = '正常', levelColor = '#22c55e'; advice = '当前流量未见明显异常，控制链路通信正常。' }
 
-  return { total, abnormal, normal, abnormalRatio, modelLabel, lowConf, topAbnormal, topList, level, levelColor, advice }
+  return { total, abnormal, normal, abnormalRatio, modelLabel, engineLabel, lowConf, topAbnormal, topList, level, levelColor, advice }
 })
 
 const protoColors = { 'UDP': '#3b82f6', 'TCP': '#f97316', 'Other': '#9ca3af' }
@@ -156,6 +159,20 @@ const runDetection = async () => {
 // ── 下载检测报告 ─────
 const downloadReport = async () => {
   if (!selectedFile.value) { ElMessage.warning('请先上传 .pcap 文件'); return }
+  if (result.value?.engine === 'ensemble_fallback') {
+    const rows = result.value?.predictions || []
+    let csv = 'packet_index,protocol,prediction,confidence,final_score\n'
+    for (const row of rows) {
+      csv += `${row.packet_index ?? ''},${row.protocol ?? ''},${row.pred_name ?? ''},${row.confidence ?? ''},${row.final_score ?? ''}\n`
+    }
+    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `payload_fallback_${result.value?.run_id || 'result'}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+    return
+  }
   reportLoading.value = true
   const formData = new FormData()
   formData.append('file', selectedFile.value)
@@ -304,7 +321,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
 
 <template>
   <ModuleHero
-    objective="识别加密控制流量中的异常指令表征与通信模式"
+    objective="识别控制流量中的异常载荷表征与通信模式"
     input="PCAP / PCAPNG 加密流量"
     output="异常类别、置信度与样本证据"
     scenario="加密控制链路内容模式检测"
@@ -389,7 +406,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
     <div ref="resultRef">
       <ResultSummary
         :status="resultStatus"
-        :title="`${summaryText.modelLabel}检测完成：${summaryText.level}`"
+        :title="`${summaryText.engineLabel} · ${summaryText.modelLabel}检测完成：${summaryText.level}`"
         :description="summaryText.advice"
         :advice="summaryText.abnormal > 0 ? '查看异常类别和低置信度样本，必要时导出报告复核。' : '保留检测记录并持续监控该控制链路。'"
         :task-id="result.run_id"
@@ -404,7 +421,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
     <div class="grid-4 metric-grid fade-in">
       <MetricCard title="检测样本" :value="(result.total_samples || 0).toLocaleString()" subtitle="本次进入模型的样本数" />
       <MetricCard title="异常比例" :value="`${(result.abnormal_ratio || 0).toFixed(2)}%`" subtitle="异常样本占全部样本比例" />
-      <MetricCard title="主要类别" :value="topCategory" subtitle="当前数量最多的预测类别" />
+      <MetricCard title="检测引擎" :value="summaryText.engineLabel" :subtitle="result.fallback_reason || `${summaryText.modelLabel}推理`" />
       <MetricCard title="低置信度" :value="`${result.low_confidence_count || 0}`" subtitle="置信度低于 50% 的样本" />
     </div>
 

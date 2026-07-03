@@ -44,7 +44,7 @@ const liveCaptureSeconds = ref(8)
 let livePollTimer = null
 
 const methodOptions = [
-  { label: '指令 + 摇杆融合（推荐）', value: 'command' },
+  { label: '可信控制流事件提取（推荐）', value: 'command' },
   { label: 'DP 模板切分', value: 'dp' },
   { label: '活动片段检测', value: 'activity' },
   { label: '滑动窗口扫描', value: 'scan' },
@@ -72,9 +72,11 @@ const segments = computed(() =>
     const duration = Number(row.duration_s ?? Math.max(0, end - start))
     const source = row.source || (duration === 0 ? 'fixed_command' : 'model')
     const sourceText = {
-      fixed_command: '固定指令',
-      fixed_signature: '固定指令',
-      joystick_0x30_0x31: '摇杆移动',
+      fixed_command: '稳定控制片段',
+      fixed_signature: '稳定控制片段',
+      joystick_0x30_0x31: '连续活动区间',
+      stable_control_fragment: '稳定控制片段',
+      continuous_control_activity: '连续活动区间',
       model: '模型识别',
     }[source] || source
     return {
@@ -99,7 +101,7 @@ const statusMeta = computed(() => {
   if (status.value === 'ANOMALY') return { type: 'danger', text: '异常', explain: '触发了任务场景约束、禁止规则或明确的流程异常。' }
   if (status.value === 'UNKNOWN_VALIDITY') return { type: 'warning', text: '待确认', explain: '未命中已知正常模板，但没有触发硬性安全规则，建议人工复核。' }
   if (status.value === 'NORMAL_WITH_TOLERANCE') return { type: 'primary', text: '容错正常', explain: '与正常模板存在轻微差异，偏差仍在当前容忍范围内。' }
-  if (status.value === 'NORMAL') return { type: 'success', text: '正常', explain: '动作顺序通过场景规则、转移概率和正常模板校验。' }
+  if (status.value === 'NORMAL') return { type: 'success', text: '正常', explain: '动作顺序符合正常模板与场景硬规则；转移概率用于提供上下文解释。' }
   return { type: 'info', text: '未校验', explain: '没有识别到可校验的动作，或流程校验尚未完成。' }
 })
 
@@ -588,7 +590,7 @@ const exportJson = () => {
 
     <div class="grid-4 mt-18">
       <MetricCard title="识别动作" :value="String(actions.length)" subtitle="按时间排序的动作标签" />
-      <MetricCard title="转移风险" :value="Number(flow?.transition_check?.max_risk || 0).toFixed(2)" subtitle="上下文中的最高异常风险" />
+      <MetricCard title="转移风险" :value="Number(flow?.transition_check?.max_risk || 0).toFixed(2)" subtitle="上下文中的最高解释性风险" />
       <MetricCard title="判定依据" :value="String(evidenceRows.length)" subtitle="需要关注的规则与转移" />
       <MetricCard title="模板相似度" :value="templateSimilarity" subtitle="与最接近正常模板的相似程度" />
     </div>
@@ -617,7 +619,7 @@ const exportJson = () => {
       <el-tab-pane label="JSON 结果" name="json" />
     </el-tabs>
     <p v-if="activeTab === 'overview'" class="tab-overview-copy">
-      上方时间线按照抓包中的发生顺序恢复动作；红色节点表示对应转移被判为低概率、未见或明确异常。
+      上方时间线按照抓包中的发生顺序恢复动作；风险颜色用于标记低频、未见或明确违规的动作衔接，最终告警仍以场景与硬规则为准。
     </p>
   </SectionBlock>
 
@@ -637,7 +639,7 @@ const exportJson = () => {
       <div class="section-header">
         <div>
           <h2 class="section-title">识别片段</h2>
-          <p class="panel-sub">固定指令显示发生时刻，持续动作显示起止区间。</p>
+          <p class="panel-sub">离散控制事件显示发生时刻，连续活动事件显示起止区间。</p>
         </div>
         <el-tag type="info">{{ segments.length }} 段</el-tag>
       </div>

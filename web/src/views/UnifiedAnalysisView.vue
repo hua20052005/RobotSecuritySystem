@@ -85,7 +85,7 @@ const overallMeta = computed(() => ({
   UNKNOWN: errorCount.value
     ? ['统一结论：检测尚不完整', `${errorCount.value} 个维度未成功完成，其余检测结果已保留。`]
     : ['统一结论：存在未知行为', '部分通信或动作未被当前训练数据覆盖，建议人工审核。'],
-  ANOMALY: ['统一结论：发现高风险迹象', '至少一个检测维度发现明确异常或检测失败，需要查看分维证据。'],
+  ANOMALY: ['统一结论：发现高风险迹象', '至少一个已完成的检测维度发现明确异常，需要查看分维证据。'],
   ERROR: ['统一检测失败', '三个检测维度均未完成，请检查后端模型与文件格式。'],
 })[overallStatus.value])
 
@@ -138,10 +138,11 @@ const requestDimension = async (key) => {
       response = await api.post('/api/side-channel/analyze', data, { timeout: 600000 })
     } else if (key === 'payload') {
       const health = await api.get('/health', { timeout: 5000 })
-      const modelReady = health.data?.etbert_models?.[payloadMode.value]
+      const payloadReady = health.data?.payload_available
+        ?? health.data?.etbert_models?.[payloadMode.value]
         ?? health.data?.etbert_available
-      if (!modelReady) {
-        throw new Error(`ET-BERT ${payloadMode.value} model is not available`)
+      if (!payloadReady) {
+        throw new Error('载荷检测引擎未就绪')
       }
       const data = freshForm()
       data.append('max_packets', '500')
@@ -164,7 +165,7 @@ const requestDimension = async (key) => {
     const detail = error.response?.data?.detail || error.message || '检测失败'
     states[key].technicalError = typeof detail === 'string' ? detail : JSON.stringify(detail)
     states[key].error = key === 'payload'
-      ? '加密表征检测暂不可用（模型文件或运行环境未就绪）'
+      ? '载荷表征检测暂不可用（模型文件或运行环境未就绪）'
       : `${dimensions.find((item) => item.key === key)?.label || '该维度'}无法运行`
   } finally {
     states[key].elapsed = Math.round(performance.now() - startedAt)
