@@ -309,7 +309,6 @@ const refreshLogs = async () => {
         <div v-else class="firewall-actions">
           <el-button
             type="primary"
-            plain
             :loading="busy === 'firewall'"
             :disabled="Boolean(busy)"
             @click="startFirewall"

@@ -44,10 +44,8 @@ const liveCaptureSeconds = ref(8)
 let livePollTimer = null
 
 const methodOptions = [
-  { label: '可信控制流事件提取（推荐）', value: 'command' },
-  { label: 'DP 模板切分', value: 'dp' },
-  { label: '活动片段检测', value: 'activity' },
-  { label: '滑动窗口扫描', value: 'scan' },
+  { label: '可信控制流动作实践提取', value: 'command' },
+  { label: '侧信道特征识别检测', value: 'scan' },
 ]
 
 const scenarioOptions = [
@@ -446,7 +444,7 @@ const exportJson = () => {
           </el-select>
         </label>
 
-        <div v-if="method !== 'command'" class="advanced-settings">
+        <div v-if="method === 'scan'" class="advanced-settings">
           <div class="field-heading">
             <strong>算法参数</strong>
             <el-tooltip content="这些参数只影响流量到动作片段的识别，不改变后续流程规则。" placement="top">

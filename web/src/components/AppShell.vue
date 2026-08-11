@@ -23,9 +23,9 @@ defineProps({
 const route = useRoute()
 const analysisItems = [
   { to: '/unified-analysis', label: '三维统一分析', icon: Compass },
-  { to: '/side-channel', label: '连接行为感知', icon: DataAnalysis },
-  { to: '/payload', label: '载荷模式研判', icon: Lock },
-  { to: '/motion', label: '动作流程校验', icon: Connection },
+  { to: '/side-channel', label: '连接行为感知模式', icon: DataAnalysis },
+  { to: '/payload', label: '载荷模式研判模式', icon: Lock },
+  { to: '/motion', label: '动作流程校验模式', icon: Connection },
 ]
 const defenseItems = [{ to: '/defense', label: '集成防御', icon: SetUp }]
 const accountItems = [

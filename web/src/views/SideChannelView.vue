@@ -19,7 +19,6 @@ import { useChart } from '../composables/useChart'
 const featureOptions = ref([])
 const selectedFeatures = ref([])
 const contamination = ref(0.06)
-const targetIp = ref('')
 const { fileList, selectedFile, handleChange: handleFileChange, handleRemove } = useSingleUpload()
 
 const loading = ref(false)
@@ -35,7 +34,6 @@ const inputMode = ref('file')
 const liveExtraConfig = computed(() => ({
   features: selectedFeatures.value,
   contamination: Number(contamination.value),
-  target_ip: targetIp.value.trim(),
 }))
 
 const handleLiveResult = async (data) => {
@@ -221,7 +219,6 @@ const runJudge = async () => {
   try {
     const { data } = await api.post('/api/side-channel/judge', {
       candidates: rows,
-      target_ip: targetIp.value.trim() || null,
       scene: '机器人侧信道流量异常二次判断',
       use_llm: true,
     })
@@ -312,7 +309,6 @@ const runAnalysis = async () => {
   formData.append('file', selectedFile.value)
   formData.append('features', JSON.stringify(selectedFeatures.value))
   formData.append('contamination', contamination.value.toString())
-  if (targetIp.value.trim()) formData.append('target_ip', targetIp.value.trim())
 
   try {
     const { data } = await api.post('/api/side-channel/analyze', formData, {
@@ -340,7 +336,6 @@ const buildEvidence = () => {
     parameters: {
       features: selectedFeatures.value,
       contamination: contamination.value,
-      target_ip: targetIp.value.trim() || null,
       file_name: selectedFile.value?.name || null,
     },
     summary: result.value.summary,
@@ -448,8 +443,6 @@ watch(activeTab, async () => {
         </label>
 
         <label class="control-field">
-          <span>目标 IP</span>
-          <el-input v-model="targetIp" placeholder="例如 10.0.4.3，可留空" />
         </label>
 
         <div class="action-row">
@@ -475,8 +468,6 @@ watch(activeTab, async () => {
           <el-slider v-model="contamination" :min="0.01" :max="0.2" :step="0.01" />
         </label>
         <label class="control-field">
-          <span>目标 IP</span>
-          <el-input v-model="targetIp" placeholder="可留空" />
         </label>
       </div>
       <LiveCapturePanel
@@ -671,7 +662,7 @@ watch(activeTab, async () => {
 
   <section v-if="result && targetHitsTable.rows.length && activeTab === 'profiles'" class="panel fade-in">
     <div class="section-header">
-      <h2 class="section-title">目标 IP 命中</h2>
+      <h2 class="section-title">重点地址命中</h2>
       <span class="pill-badge">{{ targetHitsTable.total }} 条</span>
     </div>
     <div class="data-table mt-16">
