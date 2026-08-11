@@ -16,22 +16,20 @@ import PageHeader from './PageHeader.vue'
 
 defineProps({
   serverStatus: { type: String, default: 'checking' },
-  statusText: { type: String, default: '检测中' },
-  apiHost: { type: String, default: '本地服务' },
+  statusText: { type: String, default: '检查中' },
+  apiHost: { type: String, default: '本地后端' },
 })
 
 const route = useRoute()
 const analysisItems = [
   { to: '/unified-analysis', label: '三维统一分析', icon: Compass },
-  { to: '/side-channel', label: '侧信道分析', icon: DataAnalysis },
-  { to: '/payload', label: '加密表征检测', icon: Lock },
-  { to: '/motion', label: '动作序列分析', icon: Connection },
+  { to: '/side-channel', label: '连接行为感知', icon: DataAnalysis },
+  { to: '/payload', label: '载荷模式研判', icon: Lock },
+  { to: '/motion', label: '动作流程校验', icon: Connection },
 ]
-const defenseItems = [
-  { to: '/defense', label: '系统集成防御', icon: SetUp },
-]
+const defenseItems = [{ to: '/defense', label: '集成防御', icon: SetUp }]
 const accountItems = [
-  { to: '/history', label: '检测记录', icon: Clock },
+  { to: '/history', label: '历史记录', icon: Clock },
   { to: '/profile', label: '账户设置', icon: User },
 ]
 </script>
@@ -40,7 +38,7 @@ const accountItems = [
   <div class="workbench-shell">
     <aside class="console-sidebar">
       <RouterLink class="sidebar-brand" to="/">
-        <img class="brand-mark" src="/roboguard-mark.svg" alt="" />
+        <img class="brand-mark" src="/roboguard-mark.png" alt="" />
         <span><strong>RoboGuard</strong><small>具身智能链路防御</small></span>
       </RouterLink>
 
@@ -63,7 +61,7 @@ const accountItems = [
 
       <div class="sidebar-foot">
         <DocumentChecked />
-        <span><strong>本地分析模式</strong><small>检测证据保存在当前设备</small></span>
+        <span><strong>本地分析模式</strong><small>证据保存在当前设备</small></span>
       </div>
     </aside>
 
