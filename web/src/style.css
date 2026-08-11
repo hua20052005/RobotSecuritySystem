@@ -22,7 +22,7 @@ textarea {
   min-height: 100vh;
 }
 
-/* 间距 / 尺寸工具类：替代散落在各组件里的内联 style，统一规范。 */
+/* 闂傚倸鍊搁崐濠毸夐幇顔剧幓?/ 闂佽绻愮换鎰板箹椤愶富鏁嬫い鎾跺剱閸熷懘鏌曟径鍫濆姎鐎电増姊荤槐鎺楊敃閿涘嫪瑕嗙紓浣稿綁閸楀啿顕ｇ€涙ê绶炵紒瀣閺嗘洟姊烘潪鎵瓘缂傚秮鍋撻梺璇″灛閸婃繂鐣烽悜钘壩╅柕澶涚畱閳ь剚顨堢槐鎾存媴缁嬫浠瑰┑鐐叉閸ㄤ粙寮荤仦鐣屾殕闁逞屽墮閳绘捇骞嬮敃鈧粈鍐煕濞戙埄鏆掔紒?style闂備焦瀵х粙鎴︽儔閼测晛鍨濋柣鎴烆焽閳绘棃鏌嶈閸撴盯骞夐幘顔肩妞ゆ棁鍋愬Σ娲⒑?*/
 .mt-14 { margin-top: 14px; }
 .mt-16 { margin-top: 16px; }
 .mt-18 { margin-top: 18px; }
@@ -169,12 +169,12 @@ textarea {
 }
 
 .sidebar-nav a:hover {
-  background: #f3f6f8;
+  background: #f2f8f7;
   color: var(--ink);
 }
 
 .sidebar-nav a.router-link-active {
-  background: #eaf5f3;
+  background: #deeddc;
   color: var(--accent);
   font-weight: 750;
 }
@@ -257,10 +257,10 @@ textarea {
   box-shadow: 0 0 0 3px rgba(107, 120, 137, 0.16);
 }
 
-/* 健康状态指示点：绿=在线 / 红=离线 / 黄=检测中 */
+/* 闂備胶顭堥鍐磿闁秴绠栫€广儱顦伴崑鎰版煠閸濄儺鏆柛瀣尰閹峰懘鎮烽幍顔解枌缂傚倷璁查崑鎾绘煣韫囨洘鍤€濞寸媭鍨堕弻銊モ槈濞嗘劗娈ら柣?闂備線娼荤拹鐔煎礉鎼淬劌鍚?/ 缂?缂傚倷绀侀崐钘夌暦閻㈢鍚?/ 濠?婵犵妲呴崑鈧柛瀣尰缁绘盯寮堕幋顓炲壆闂?*/
 .sidebar-status.is-online::before {
   background: var(--ok);
-  box-shadow: 0 0 0 3px rgba(29, 138, 85, 0.16);
+  box-shadow: 0 0 0 3px rgba(65, 153, 160, 0.16);
 }
 
 .sidebar-status.is-offline::before {
@@ -910,7 +910,7 @@ textarea {
 .el-input__wrapper:hover,
 .el-select__wrapper:hover,
 .el-textarea__inner:hover {
-  box-shadow: 0 0 0 1px #b8c4cc inset;
+  box-shadow: 0 0 0 1px #aecfd1 inset;
 }
 
 .el-input__wrapper.is-focus,
@@ -923,15 +923,15 @@ textarea {
   min-height: 172px;
   display: grid;
   align-content: center;
-  border: 1px dashed #b9c7d0;
+  border: 1px dashed #aecfd1;
   border-radius: 7px;
-  background: #f8fafb;
+  background: #f8fbfa;
   transition: border-color 160ms ease, background 160ms ease;
 }
 
 .el-upload-dragger:hover {
   border-color: var(--accent);
-  background: #f4f7fd;
+  background: #f0f8f6;
 }
 
 .el-tag {
@@ -1244,40 +1244,40 @@ textarea {
 }
 
 .el-button--primary {
-  --el-button-bg-color: #176f68;
-  --el-button-border-color: #176f68;
-  --el-button-hover-bg-color: #23857c;
-  --el-button-hover-border-color: #23857c;
-  --el-button-active-bg-color: #105b55;
-  --el-button-active-border-color: #105b55;
-  --el-button-disabled-bg-color: #d9ebe8;
-  --el-button-disabled-border-color: #c7dfdb;
+  --el-button-bg-color: #77b5b4;
+  --el-button-border-color: #77b5b4;
+  --el-button-hover-bg-color: #77b5b4;
+  --el-button-hover-border-color: #77b5b4;
+  --el-button-active-bg-color: #5f9fa0;
+  --el-button-active-border-color: #5f9fa0;
+  --el-button-disabled-bg-color: #deeddc;
+  --el-button-disabled-border-color: #c0dade;
 }
 
 .el-button--primary.is-plain {
-  --el-button-text-color: #176f68;
-  --el-button-bg-color: #eef7f5;
-  --el-button-border-color: #a9cec8;
+  --el-button-text-color: #5f9fa0;
+  --el-button-bg-color: #f2f8f7;
+  --el-button-border-color: #aecfd1;
   --el-button-hover-text-color: #ffffff;
 }
 
 .el-tabs__item.is-active,
 .el-tabs__item:hover {
-  color: #176f68;
+  color: #77b5b4;
 }
 
 .el-tabs__active-bar {
-  background-color: #176f68;
+  background-color: #77b5b4;
 }
 
 .el-checkbox__input.is-checked .el-checkbox__inner,
 .el-checkbox__input.is-indeterminate .el-checkbox__inner {
-  border-color: #176f68;
-  background-color: #176f68;
+  border-color: #77b5b4;
+  background-color: #77b5b4;
 }
 
 .el-checkbox__input.is-checked + .el-checkbox__label {
-  color: #176f68;
+  color: #77b5b4;
 }
 
 .el-button,
@@ -1452,8 +1452,8 @@ textarea {
 }
 
 .module-chip {
-  background: #edf4ff;
-  color: #1d4ed8;
+  background: #eef7f3;
+  color: #5f9fa0;
 }
 
 .module-chip.payload {
@@ -1462,21 +1462,29 @@ textarea {
 }
 
 .module-chip.motion {
-  background: #f3eefe;
-  color: #6d28d9;
+  background: #eef6f4;
+  color: #77b5b4;
 }
 
-.risk-badge.正常 {
+.risk-badge.normal,
+.risk-badge.NORMAL {
   background: #ecfdf3;
   color: var(--ok);
 }
 
-.risk-badge.中危 {
+.risk-badge.medium,
+.risk-badge.pending,
+.risk-badge.TOLERATED,
+.risk-badge.UNKNOWN,
+.risk-badge.PENDING {
   background: #fffaeb;
   color: var(--warning);
 }
 
-.risk-badge.高危 {
+.risk-badge.high,
+.risk-badge.danger,
+.risk-badge.ANOMALY,
+.risk-badge.ERROR {
   background: #fef3f2;
   color: var(--danger);
 }
@@ -1492,21 +1500,6 @@ textarea {
 .module-chip.papb {
   background: #e6f7f4;
   color: var(--accent-2);
-}
-
-.risk-badge.正常 {
-  background: #ecfdf3;
-  color: var(--ok);
-}
-
-.risk-badge.待确认 {
-  background: #fffaeb;
-  color: var(--warning);
-}
-
-.risk-badge.高风险 {
-  background: #fef3f2;
-  color: var(--danger);
 }
 
 .profile-layout {
@@ -1791,7 +1784,7 @@ textarea {
 .flow-node.missing {
   border-style: dashed;
   border-color: #9bbcf7;
-  background: #edf4ff;
+  background: #eef7f3;
 }
 
 .flow-edge {

@@ -50,6 +50,7 @@ const sideStatus = computed(() => {
   if (ratio > 0) return 'UNKNOWN'
   return 'NORMAL'
 })
+
 const payloadStatus = computed(() => {
   const ratio = Number(states.payload.result?.abnormal_ratio || 0)
   if (ratio > 20) return 'ANOMALY'
@@ -57,6 +58,7 @@ const payloadStatus = computed(() => {
   if (ratio > 0) return 'UNKNOWN'
   return 'NORMAL'
 })
+
 const motionStatus = computed(() => states.motion.result?.summary?.flow_status || 'UNKNOWN')
 
 const dimensionStatus = (key) => {
@@ -78,29 +80,29 @@ const overallStatus = computed(() => {
 })
 
 const overallMeta = computed(() => ({
-  PENDING: ['等待统一检测', '上传一份 PCAP，并选择需要运行的检测维度。'],
-  RUNNING: ['三维检测正在运行', `已完成 ${completedCount.value}/${selectedCount.value} 个检测维度。`],
-  NORMAL: ['统一结论：未发现明显风险', '三个检测维度均未发现需要升级处置的异常证据。'],
-  TOLERATED: ['统一结论：存在可容忍偏差', '检测到轻微离群或模板偏差，建议结合业务场景复核。'],
+  PENDING: ['等待统一分析', '上传 PCAP 后，系统将并行完成三类检测并汇总风险结论。'],
+  RUNNING: ['统一分析进行中', `正在完成 ${completedCount.value}/${selectedCount.value} 个检测维度。`],
+  NORMAL: ['综合结论正常', '当前三类证据未发现明显异常，可继续查看分维证据。'],
+  TOLERATED: ['存在轻微偏离', '部分检测结果出现可容忍偏离，建议结合场景复核。'],
   UNKNOWN: errorCount.value
-    ? ['统一结论：检测尚不完整', `${errorCount.value} 个维度未成功完成，其余检测结果已保留。`]
-    : ['统一结论：存在未知行为', '部分通信或动作未被当前训练数据覆盖，建议人工审核。'],
-  ANOMALY: ['统一结论：发现高风险迹象', '至少一个已完成的检测维度发现明确异常，需要查看分维证据。'],
-  ERROR: ['统一检测失败', '三个检测维度均未完成，请检查后端模型与文件格式。'],
+    ? ['综合结论待确认', `${errorCount.value} 个检测维度未完成，已完成维度的结果仍会保留。`]
+    : ['综合结论待确认', '检测结果存在不确定性，建议进入分维证据查看原始输出。'],
+  ANOMALY: ['发现异常风险', '至少一个检测维度给出异常结论，建议进入防御控制台或查看分维证据。'],
+  ERROR: ['统一分析失败', '所有检测维度均未完成，请检查后端服务、模型状态或输入文件。'],
 })[overallStatus.value])
 
 const dimensionSummary = computed(() => ({
   side: {
     primary: `${(Number(states.side.result?.summary?.ratio || 0) * 100).toFixed(2)}%`,
-    secondary: `${states.side.result?.summary?.abnormal || 0} 个可疑包`,
+    secondary: `${states.side.result?.summary?.abnormal || 0} 个可疑流量片段`,
   },
   payload: {
     primary: `${Number(states.payload.result?.abnormal_ratio || 0).toFixed(2)}%`,
-    secondary: `${states.payload.result?.low_confidence_count || 0} 个低置信度样本`,
+    secondary: `${states.payload.result?.low_confidence_count || 0} 个低置信度结果`,
   },
   motion: {
     primary: states.motion.result?.summary?.flow_status || '-',
-    secondary: `${states.motion.result?.actions?.length || 0} 个识别动作`,
+    secondary: `${states.motion.result?.actions?.length || 0} 个动作片段`,
   },
 }))
 
@@ -142,7 +144,7 @@ const requestDimension = async (key) => {
         ?? health.data?.etbert_models?.[payloadMode.value]
         ?? health.data?.etbert_available
       if (!payloadReady) {
-        throw new Error('载荷检测引擎未就绪')
+        throw new Error('加密表征检测模型或服务尚未就绪')
       }
       const data = freshForm()
       data.append('max_packets', '500')
@@ -165,8 +167,8 @@ const requestDimension = async (key) => {
     const detail = error.response?.data?.detail || error.message || '检测失败'
     states[key].technicalError = typeof detail === 'string' ? detail : JSON.stringify(detail)
     states[key].error = key === 'payload'
-      ? '载荷表征检测暂不可用（模型文件或运行环境未就绪）'
-      : `${dimensions.find((item) => item.key === key)?.label || '该维度'}无法运行`
+      ? '加密表征检测暂不可用，已保留其他维度结果。'
+      : `${dimensions.find((item) => item.key === key)?.label || '检测'}未完成`
   } finally {
     states[key].elapsed = Math.round(performance.now() - startedAt)
   }
@@ -186,7 +188,7 @@ const runUnified = async () => {
   activeTab.value = 'overview'
   taskId.value = `UA-${Date.now().toString(36).toUpperCase()}`
   dimensions.forEach(({ key }) => {
-    states[key].state = enabled[key] ? 'PENDING' : 'PENDING'
+    states[key].state = 'PENDING'
     states[key].result = null
     states[key].error = ''
     states[key].technicalError = ''
@@ -199,8 +201,8 @@ const runUnified = async () => {
   resultReady.value = true
   await nextTick()
   resultRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  if (overallStatus.value === 'ANOMALY') ElMessage.error('统一分析完成：发现需要复核的高风险证据')
-  else if (overallStatus.value === 'UNKNOWN') ElMessage.warning('统一分析完成：存在未知行为')
+  if (overallStatus.value === 'ANOMALY') ElMessage.error('统一分析发现异常风险')
+  else if (overallStatus.value === 'UNKNOWN') ElMessage.warning('统一分析结果待确认')
   else ElMessage.success('统一分析完成')
 }
 
@@ -223,7 +225,7 @@ const toggleDimension = (key) => {
     scenario="比赛演示、现场排查与综合分析"
   />
 
-  <SectionBlock title="统一检测入口" description="上传一次抓包，选择轮盘中的检测维度并并行运行。" class="fade-in">
+  <SectionBlock title="统一检测入口" description="上传一次抓包，选择检测维度并并行运行。" class="fade-in">
     <div class="unified-entry-grid">
       <div>
         <UploadPanel
@@ -235,16 +237,16 @@ const toggleDimension = (key) => {
         />
         <div class="unified-options">
           <label class="control-field">
-          <span>加密表征检测粒度</span>
+            <span>加密表征检测粒度</span>
             <el-segmented v-model="payloadMode" :options="[{ label: '包级', value: 'packet' }, { label: '流级', value: 'flow' }]" />
           </label>
           <label class="control-field">
             <span>动作任务场景</span>
             <el-select v-model="scenario">
               <el-option label="自由操控 / 通用演示" value="general" />
-              <el-option label="巡逻任务" value="patrol" />
-              <el-option label="低冲击交互展示" value="interaction" />
-              <el-option label="完整动作表演" value="performance" />
+              <el-option label="巡检任务" value="patrol" />
+              <el-option label="人机交互" value="interaction" />
+              <el-option label="性能展示" value="performance" />
             </el-select>
           </label>
         </div>
@@ -268,11 +270,11 @@ const toggleDimension = (key) => {
           </button>
           <div class="wheel-center">
             <strong>{{ running ? `${completedCount}/${selectedCount}` : selectedCount }}</strong>
-            <span>{{ running ? '检测完成' : '检测维度' }}</span>
+            <span>{{ running ? '检测中' : '检测维度' }}</span>
           </div>
         </div>
         <el-button type="primary" size="large" :loading="running" :disabled="!selectedFile || !selectedCount || running" @click="runUnified">
-          {{ running ? '统一分析进行中' : '开始三维统一分析' }}
+          {{ running ? '统一分析中...' : '开始三维统一分析' }}
         </el-button>
       </div>
     </div>
@@ -288,7 +290,7 @@ const toggleDimension = (key) => {
         :status="overallStatus"
         :title="overallMeta[0]"
         :description="overallMeta[1]"
-        :advice="errorCount ? '可继续使用已完成维度的结果，缺失维度稍后单独重试。' : overallStatus === 'ANOMALY' ? '进入分维证据，优先复核红色维度。' : '保存统一结果，并按需进入单项模块深挖证据。'"
+        :advice="errorCount ? '部分维度未完成，请结合分维证据复核。' : overallStatus === 'ANOMALY' ? '建议进入防御控制台或查看异常维度原始证据。' : '可进入单项模块查看更详细的检测证据。'"
         :task-id="taskId"
         :duration="running ? '运行中' : `${(elapsedMs / 1000).toFixed(2)} s`"
       />
@@ -304,7 +306,7 @@ const toggleDimension = (key) => {
       />
     </div>
 
-    <SectionBlock v-if="resultReady" title="统一分析结果" description="从统一结论进入每个检测维度的摘要与原始证据。" class="fade-in">
+    <SectionBlock v-if="resultReady" title="统一分析结果" description="从综合结论进入每个检测维度的摘要与原始证据。" class="fade-in">
       <el-tabs v-model="activeTab" class="audit-tabs">
         <el-tab-pane label="综合概览" name="overview">
           <div class="dimension-result-list">
@@ -316,7 +318,7 @@ const toggleDimension = (key) => {
               </div>
               <RiskBadge :status="enabled[item.key] ? dimensionStatus(item.key) : 'PENDING'" />
               <el-button text :disabled="!states[item.key].result" @click="router.push({ side: '/side-channel', payload: '/payload', motion: '/motion' }[item.key])">
-                深入分析
+                打开单项模块
               </el-button>
             </article>
           </div>
@@ -382,13 +384,13 @@ const toggleDimension = (key) => {
 
 .analysis-wheel::before {
   inset: 35px 50px 35px;
-  border: 1px solid #d6dfe5;
-  background: #f8fafb;
+  border: 1px solid #c0dade;
+  background: linear-gradient(135deg, rgba(222, 237, 220, 0.44), rgba(192, 218, 222, 0.28));
 }
 
 .analysis-wheel::after {
   inset: 92px 108px;
-  border: 1px dashed #b9c8d2;
+  border: 1px dashed #aecfd1;
 }
 
 .wheel-node {
@@ -407,12 +409,12 @@ const toggleDimension = (key) => {
   color: var(--muted);
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 8px 22px rgba(35, 49, 60, 0.07);
+  box-shadow: 0 12px 26px rgba(119, 181, 180, 0.12);
 }
 
 .wheel-node.is-enabled {
-  border-color: #b8c9da;
-  color: var(--accent);
+  border-color: #aecfd1;
+  color: #77b5b4;
 }
 
 .wheel-node.is-disabled {
@@ -454,12 +456,12 @@ const toggleDimension = (key) => {
   height: 86px;
   display: grid;
   place-content: center;
-  border: 1px solid #b8c9da;
+  border: 1px solid #aecfd1;
   border-radius: 50%;
   background: white;
-  color: var(--accent);
+  color: #77b5b4;
   text-align: center;
-  box-shadow: 0 8px 24px rgba(35, 49, 60, 0.08);
+  box-shadow: 0 12px 28px rgba(119, 181, 180, 0.16);
 }
 
 .wheel-center strong {
@@ -493,7 +495,7 @@ const toggleDimension = (key) => {
 }
 
 .dimension-result-list article > .el-icon {
-  color: var(--accent);
+  color: #77b5b4;
   font-size: 22px;
 }
 
@@ -517,6 +519,11 @@ const toggleDimension = (key) => {
   gap: 10px;
 }
 
+.unified-entry-grid :deep(.el-segmented__item.is-selected) {
+  background: #77b5b4 !important;
+  color: #ffffff !important;
+}
+
 @media (max-width: 900px) {
   .unified-entry-grid {
     grid-template-columns: 1fr;
@@ -537,15 +544,6 @@ const toggleDimension = (key) => {
 
   .wheel-center {
     left: 122px;
-  }
-
-  .dimension-result-list article {
-    grid-template-columns: 30px minmax(0, 1fr) auto;
-  }
-
-  .dimension-result-list article > .el-button {
-    grid-column: 2 / -1;
-    justify-self: start;
   }
 }
 </style>

@@ -17,27 +17,27 @@ const openAuth = inject('openAuth')
 const modules = [
   {
     title: '侧信道流量分析',
-    description: '从包长、方向和时间行为中定位可疑通信模式。',
+    description: '从包长、方向和时间行为中定位可疑通信模式，发现控制链路中的异常连接迹象。',
     route: '/side-channel',
     icon: DataAnalysis,
     tone: 'cyan',
     index: '01',
     input: 'PCAP 元数据',
-    output: '异常连接与可疑包',
+    output: '异常连接与可疑流量',
   },
   {
     title: '加密流量表征检测',
-    description: '通过双粒度载荷接口识别内容模式异常，并支持模型不可用时显式降级。',
+    description: '通过双粒度载荷接口识别内容模式异常，并在模型不可用时提供显式降级结果。',
     route: '/payload',
     icon: Lock,
     tone: 'coral',
     index: '02',
-    input: '加密流量表征',
+    input: '流量表征特征',
     output: '异常类别与置信度',
   },
   {
     title: '动作序列分析',
-    description: '识别机器狗动作，并检查上下文转移与流程一致性。',
+    description: '识别机器狗动作序列，并检查上下文转移与任务流程的一致性。',
     route: '/motion',
     icon: Connection,
     tone: 'green',
@@ -66,7 +66,7 @@ const modules = [
         <span class="hero-kicker"><i></i> Robot traffic intelligence</span>
         <h1>RoboGuard</h1>
         <p class="hero-product-title">面向具身智能控制链路的安全防御系统</p>
-        <p>融合连接侧信道、载荷表征与动作时序分析，从原始流量发现风险并进入受控处置流程。</p>
+        <p>融合连接侧信道、流量表征与动作时序分析，从原始流量发现风险，并进入受控处置流程。</p>
         <div class="hero-actions">
           <el-button type="primary" size="large" @click="router.push('/unified-analysis')">
             三维统一分析
@@ -88,7 +88,7 @@ const modules = [
           <span>核心模块</span>
           <h2>从流量到行为的三层检测</h2>
         </div>
-        <p>按需进入任一模块，也可以沿侧信道、加密表征、动作序列的顺序完成整套分析。</p>
+        <p>按需进入任一模块，也可以沿侧信道、流量表征、动作序列的顺序完成整套分析。</p>
       </div>
 
       <div class="module-grid">
@@ -124,12 +124,11 @@ const modules = [
     </section>
   </main>
 </template>
-
 <style scoped>
 .home {
   min-height: 100vh;
   padding: 0 clamp(18px, 4vw, 64px) 64px;
-  background: #eaf0f3;
+  background: #eef4f4;
 }
 
 .home-nav {
@@ -145,7 +144,7 @@ const modules = [
   display: flex;
   align-items: center;
   gap: 11px;
-  color: #171b24;
+  color: #173238;
   text-decoration: none;
 }
 
@@ -155,7 +154,7 @@ const modules = [
   height: 36px;
   place-items: center;
   border-radius: 7px;
-  background: #171b24;
+  background: linear-gradient(135deg, #4199a0 0%, #77b5b4 100%);
   color: white;
   font-weight: 800;
 }
@@ -169,7 +168,7 @@ const modules = [
 }
 
 .home-brand small {
-  color: #77828f;
+  color: #789092;
   font-size: 10px;
   text-transform: uppercase;
 }
@@ -184,7 +183,7 @@ const modules = [
 .text-action {
   border: 0;
   background: transparent;
-  color: #3f4a58;
+  color: #486568;
   cursor: pointer;
   font-weight: 650;
 }
@@ -213,7 +212,7 @@ const modules = [
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  color: #466172;
+  color: #486568;
   font-size: 12px;
   font-weight: 750;
   text-transform: uppercase;
@@ -223,13 +222,13 @@ const modules = [
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #11a5a3;
-  box-shadow: 0 0 0 5px rgba(17, 165, 163, 0.12);
+  background: #4199a0;
+  box-shadow: 0 0 0 5px rgba(65, 153, 160, 0.16);
 }
 
 .hero-copy h1 {
   margin: 22px 0 20px;
-  color: #171b24;
+  color: #173238;
   font-size: clamp(42px, 4.5vw, 64px);
   font-weight: 780;
   line-height: 1.07;
@@ -238,7 +237,7 @@ const modules = [
 .hero-copy p {
   max-width: 470px;
   margin: 0;
-  color: #526271;
+  color: #5f7476;
   font-size: 16px;
   line-height: 1.75;
 }
@@ -246,7 +245,7 @@ const modules = [
 .hero-copy .hero-product-title {
   max-width: 560px;
   margin: -7px 0 12px;
-  color: #20383b;
+  color: #173238;
   font-size: 20px;
   font-weight: 750;
   line-height: 1.45;
@@ -279,8 +278,8 @@ const modules = [
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #1a9b61;
-  box-shadow: 0 0 0 5px rgba(26, 155, 97, 0.13);
+  background: #77b5b4;
+  box-shadow: 0 0 0 5px rgba(119, 181, 180, 0.18);
 }
 
 .hero-status div {
@@ -293,7 +292,7 @@ const modules = [
 }
 
 .hero-status small {
-  color: #72808d;
+  color: #789092;
   font-size: 10px;
 }
 
@@ -340,10 +339,10 @@ const modules = [
   min-height: 290px;
   padding: 24px;
   overflow: hidden;
-  border: 1px solid #dfe6eb;
+  border: 1px solid #d7e7e5;
   border-radius: 8px;
   background: #fff;
-  color: #171b24;
+  color: #173238;
   text-align: left;
   cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -351,15 +350,15 @@ const modules = [
 
 .module-card:hover {
   transform: translateY(-3px);
-  border-color: #c4d1da;
-  box-shadow: 0 16px 36px rgba(39, 54, 68, 0.09);
+  border-color: #aecfd1;
+  box-shadow: 0 18px 42px rgba(65, 153, 160, 0.12);
 }
 
 .module-index {
   position: absolute;
   top: 22px;
   right: 22px;
-  color: #a4adb6;
+  color: #9bb8ba;
   font-size: 12px;
   font-weight: 750;
 }
@@ -374,18 +373,18 @@ const modules = [
 }
 
 .is-cyan .module-icon {
-  background: #e5f7f7;
-  color: #078c8a;
+  background: #e8f5f4;
+  color: #4199a0;
 }
 
 .is-coral .module-icon {
-  background: #fff0eb;
-  color: #df6347;
+  background: #f5eeea;
+  color: #a96f60;
 }
 
 .is-green .module-icon {
-  background: #eaf7ef;
-  color: #278554;
+  background: #deeddc;
+  color: #4d8f72;
 }
 
 .module-card > strong {
@@ -396,7 +395,7 @@ const modules = [
 
 .module-card > small {
   margin-top: 8px;
-  color: #6a7683;
+  color: #6b8183;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -407,12 +406,12 @@ const modules = [
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 15px;
-  color: #6b7783;
+  color: #789092;
   font-size: 11px;
 }
 
 .module-io b {
-  color: #33404c;
+  color: #486568;
   font-weight: 750;
 }
 
@@ -420,7 +419,7 @@ const modules = [
   width: 1px;
   height: 11px;
   margin: 0 3px;
-  background: #dce3e7;
+  background: #c0dade;
 }
 
 .module-enter {
@@ -441,9 +440,9 @@ const modules = [
   max-width: 1260px;
   margin: 54px auto 0;
   padding: 28px 30px;
-  border-top: 1px solid #ccd8d7;
-  border-bottom: 1px solid #ccd8d7;
-  background: #e5efed;
+  border-top: 1px solid #c0dade;
+  border-bottom: 1px solid #c0dade;
+  background: linear-gradient(135deg, rgba(222, 237, 220, 0.72), rgba(192, 218, 222, 0.52));
 }
 
 .defense-entry-icon {
@@ -452,7 +451,7 @@ const modules = [
   height: 52px;
   place-items: center;
   border-radius: 8px;
-  background: #176f68;
+  background: #4199a0;
   color: white;
   font-size: 25px;
 }
@@ -465,14 +464,14 @@ const modules = [
 
 .defense-entry h2 {
   margin: 5px 0 5px;
-  color: #1e2b2e;
+  color: #173238;
   font-size: 22px;
 }
 
 .defense-entry p {
   max-width: 720px;
   margin: 0;
-  color: #5b696d;
+  color: #5f7476;
   font-size: 13px;
   line-height: 1.65;
 }
