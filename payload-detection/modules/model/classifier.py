@@ -1,9 +1,13 @@
 # classifier.py - 轻量级特征分类模型（LightGBM）
 
-import lightgbm as lgb
 import numpy as np
 import pickle
 from typing import Dict, Optional, Tuple
+
+try:
+    import lightgbm as lgb
+except ImportError:
+    lgb = None
 
 class LightGBMClassifier:
     """
@@ -63,16 +67,29 @@ class LightGBMClassifier:
         importance = self.model.feature_importance()
         return dict(zip(self.feature_names, importance))
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from typing import Dict, Any, List, Optional
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-import lightgbm as lgb
-import xgboost as xgb
 from sklearn.metrics import accuracy_score, f1_score
+
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+except ImportError:
+    torch = None
+
+    class _FallbackNN:
+        Module = object
+
+    nn = _FallbackNN()
+    F = None
+
+try:
+    import xgboost as xgb
+except ImportError:
+    xgb = None
 
 class BaseClassifier:
     """

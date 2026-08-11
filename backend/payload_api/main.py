@@ -17,6 +17,7 @@ from backend.ai_report import router as ai_report_router
 from backend.auth_api import router as auth_router
 from backend.db import create_task, init_db
 from backend.defense_api import router as defense_router
+from backend.payload_fallback import run_payload_detector
 from backend.motion_api import router as motion_router
 from backend.live_motion_api import (
     payload_router as live_payload_router,
@@ -147,29 +148,13 @@ async def detect_file(
     content = await file.read()
     input_path.write_bytes(content)
 
-    cmd = [
-        sys.executable,
-        str(SCRIPT_PATH),
-        str(input_path),
-        "--output",
-        str(output_csv),
-        "--summary-output",
-        str(output_summary),
-        "--ensemble",
-        str(DEFAULT_ENSEMBLE),
-    ]
-    if limit is not None and limit > 0:
-        cmd.extend(["--limit", str(limit)])
-    if verbose:
-        cmd.append("--verbose")
-
-    proc = subprocess.run(
-        cmd,
-        cwd=str(PAYLOAD_ROOT),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+    proc = run_payload_detector(
+        input_path=input_path,
+        output_csv=output_csv,
+        output_summary=output_summary,
+        ensemble_path=DEFAULT_ENSEMBLE,
+        limit=limit,
+        verbose=verbose,
     )
 
     stderr_text = proc.stderr or ""

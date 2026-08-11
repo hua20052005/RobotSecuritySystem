@@ -2,6 +2,29 @@
 
 面向具身智能控制链路的安全分析与受控防御系统。
 
+## 评审机部署（Windows，推荐）
+
+压缩包不包含 `.venv`、`node_modules` 和本地运行数据。首次解压后，请在能够访问
+Python 软件源和 npm 软件源的 Windows 10/11 计算机上完成一次依赖安装：
+
+```text
+1. 安装 Python 3.11（64 位）和 Node.js 20+
+2. 双击 setup_local.cmd，等待依赖安装与前端构建验证完成
+3. 双击 start_local.cmd，浏览器访问 http://127.0.0.1:5173/
+```
+
+停止系统时双击 `stop_local.cmd`。首次安装会下载 Python 与前端依赖，耗时取决于
+网络速度；后续启动不需要重复执行 `setup_local.cmd`。若评审环境不能联网，应提前
+准备依赖缓存或使用已完成依赖安装的演示计算机。
+
+启动后可通过以下地址检查服务：
+
+- Web 工作台：`http://127.0.0.1:5173/`
+- 后端健康检查：`http://127.0.0.1:8010/health`
+- 后端接口文档：`http://127.0.0.1:8010/docs`
+
+如果 8010 端口已被占用，启动脚本会自动改用 8011，并让前端连接实际端口。
+
 RoboGuard 从机器人控制流量中组织三类互补证据：
 
 1. **侧信道流量分析**：基于包长、方向、端口、到达间隔和连接画像发现离群通信。
@@ -69,6 +92,9 @@ RobotSecuritySystem/
 ├─ deployment/robot/        机器人端防御与流量代理脚本
 ├─ docs/                    部署与防御控制说明
 ├─ tests/                   自动化测试
+├─ setup_local.cmd          首次安装 Python 与前端依赖
+├─ start_local.cmd          启动前后端服务
+├─ stop_local.cmd           停止本项目启动的服务
 ├─ run_backend.py           后端启动入口
 └─ requirements.txt         Python 依赖
 ```
@@ -83,7 +109,13 @@ RobotSecuritySystem/
 
 ## 5. 快速启动
 
-若本机已经安装好 Python 依赖与前端依赖，可在项目根目录直接运行：
+首次部署：
+
+```powershell
+.\setup_local.cmd
+```
+
+依赖安装完成后，在项目根目录运行：
 
 ```powershell
 .\start_local.cmd

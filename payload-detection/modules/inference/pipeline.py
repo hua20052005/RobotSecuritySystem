@@ -1,7 +1,6 @@
 # pipeline.py - 推理管道集成（前沿多模型融合）
 
 import numpy as np
-import torch
 from typing import Dict, Any, Optional, List
 import logging
 
@@ -9,10 +8,27 @@ from modules.parser import ProtocolParser
 from modules.rules_engine import RulesEngine
 from modules.feature import FeatureExtractor
 from modules.tokenizer import ByteTokenizer
-from modules.model.packet_transformer import PacketTransformer
-from modules.model.classifier import LightGBMClassifier
-from modules.model.anomaly_detector import IsolationForestAnomalyDetector
 from modules.inference.scorer import FusionScorer
+
+try:
+    import torch
+except ImportError:
+    torch = None
+
+try:
+    from modules.model.packet_transformer import PacketTransformer
+except ImportError:
+    PacketTransformer = None
+
+try:
+    from modules.model.classifier import LightGBMClassifier
+except ImportError:
+    LightGBMClassifier = None
+
+try:
+    from modules.model.anomaly_detector import IsolationForestAnomalyDetector
+except ImportError:
+    IsolationForestAnomalyDetector = None
 
 class PayloadDetectionPipeline:
     """
@@ -60,6 +76,10 @@ class PayloadDetectionPipeline:
         """加载预训练模型"""
         # 加载Transformer模型
         if transformer_path and self.use_transformer:
+            if torch is None or PacketTransformer is None:
+                self.logger.warning("Transformer runtime is not installed")
+                self.use_transformer = False
+                return
             try:
                 self.transformer = torch.load(transformer_path, map_location=self.device)
                 self.transformer.eval()  # 设置为推理模式
@@ -94,6 +114,9 @@ class PayloadDetectionPipeline:
 
         # 备选：加载单独的LightGBM（如果ensemble_path不可用）
         if lgb_path and not self.ensemble_classifier:
+            if LightGBMClassifier is None:
+                self.logger.warning("LightGBM runtime is not installed")
+                return
             try:
                 from modules.model.classifier import LightGBMClassifier
                 self.lgb_classifier = LightGBMClassifier()

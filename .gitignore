@@ -1,5 +1,5 @@
 # ============================================================
-#  Python
+# Python
 # ============================================================
 __pycache__/
 *.py[cod]
@@ -7,60 +7,85 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ipynb_checkpoints/
-# 虚拟环境
-venv/
+
+# Local Python runtimes / virtual environments
 .venv/
+.venv_runtime/
+.roboguard-conda/
+.roboguard-build*/
+.runtime_deps/
+venv/
 env/
+
 # ============================================================
-#  密钥 / 环境配置（绝不上传！）
+# Secrets / local environment
 # ============================================================
 .env
 .env.*
+!.env.example
+!web/.env.example
 *.key
+*.pem
+*.p12
 secrets.*
+
 # ============================================================
-#  开发工具 / 编辑器
+# Editors / OS files
 # ============================================================
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
 # ============================================================
-#  前端（Node / Vite）
+# Frontend
 # ============================================================
 node_modules/
+web/node_modules/
 web/dist/
 web/.vite/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
-# 项目副本 / 备份目录（不要上传整份拷贝）
-web - 副本/
-*副本*/
-*_backup/
-*.bak
+
 # ============================================================
-#  数据文件（大文件 / 抓包 / 数据库）
+# Local runtime logs and temporary outputs
 # ============================================================
-0613.7z
-*.pcap
-*.pcapng
-*.db
-*.sqlite
-*.sqlite3
-*.zip
+*.log
+.runlogs/
+runtime_logs/
 data/api_runs/
-payload-detection/data/datasets/
+data/etbert_runs/
 payload-detection/data/api_runs/
 core/api_runs/
 backend/api_runs/
-data/etbert_runs/
-runtime_logs/
 .unified-test/
+results_windowed/
+tmp/
+temp/
 inference_results.json
+
+# Browser profiles generated during visual checks
+.chrome-dom-profile*/
+.visual-check/
+
 # ============================================================
-#  运动识别训练数据 & 模型输出（PCAP 过大 / 临时产物）
+# Captures, datasets, databases, and bulky generated data
 # ============================================================
+*.pcap
+*.pcapng
+*.cap
+*.db
+*.sqlite
+*.sqlite3
+*.7z
+*.zip
+*.rar
+*.tar
+*.tar.gz
+
+# Keep repository source small; use docs to explain where private datasets live.
+payload-detection/data/datasets/
 motion/motion/hello/
 motion/motion/jump/
 motion/motion/step/
@@ -68,15 +93,34 @@ motion/motion/walk/
 motion/motion/outputs_motion_model*/
 motion/motion/scapy/
 motion/motion/api_runs/
-motion/0615
-# ============================================================
-#  运行产物 / 日志 / 临时结果
-# ============================================================
-*.log
-.runlogs/
-results_windowed/
-*.bin
-*.bin
+motion/0615/
+
+# Large local model/checkpoint folders. Small configs below are explicitly kept.
 ET-BERT-main/models/
+!ET-BERT-main/models/
 !ET-BERT-main/models/bert_base_config.json
 !ET-BERT-main/models/encryptd_vocab.txt
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ============================================================
+# Packaging outputs
+# ============================================================
+build/
+dist/
+release/
+*.spec~
+*.toc
+*.pyz
+*.pkg
+*.exe
+
+# ============================================================
+# Backup / duplicate project copies
+# ============================================================
+web - 副本/
+*副本*/
+*_backup/
+*.bak
