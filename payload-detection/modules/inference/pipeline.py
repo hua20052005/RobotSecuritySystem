@@ -38,7 +38,7 @@ class PayloadDetectionPipeline:
     """
 
     def __init__(self, use_transformer: bool = True, use_anomaly: bool = True, device: str = 'cpu'):
-        self.device = device
+        self.device = self._resolve_device(device)
         self.logger = self._setup_logger()
         
         # 初始化各个模块
@@ -68,6 +68,14 @@ class PayloadDetectionPipeline:
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
         return logger
+
+    def _resolve_device(self, device: str) -> str:
+        """解析推理设备，如果传入 auto 则尝试使用 CUDA"""
+        if device == 'auto':
+            if torch is not None and torch.cuda.is_available():
+                return 'cuda'
+            return 'cpu'
+        return device
 
     def load_models(self, transformer_path: Optional[str] = None, 
                    lgb_path: Optional[str] = None,

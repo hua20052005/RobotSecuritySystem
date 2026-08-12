@@ -27,7 +27,7 @@ def main():
     pipeline = PayloadDetectionPipeline(
         use_transformer=True,    # ✓ 启用Transformer
         use_anomaly=True,        # ✓ 启用异常检测
-        device='cpu'
+        device='auto'
     )
     
     print("✓ 管道初始化完成")

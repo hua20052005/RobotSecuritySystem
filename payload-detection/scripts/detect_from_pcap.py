@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument('--output', type=str, default='detect_results.csv', help='结果CSV输出路径')
     parser.add_argument('--summary-output', type=str, default=None, help='整体汇总JSON输出路径（默认: 与CSV同目录同名前缀_summary.json）')
     parser.add_argument('--limit', type=int, default=None, help='最多检测包数')
+    parser.add_argument('--device', type=str, default='auto', help='推理设备: cpu / cuda / auto')
     parser.add_argument('--verbose', action='store_true', help='显示详细日志')
     return parser.parse_args()
 
@@ -52,7 +53,7 @@ def main():
     pipeline = PayloadDetectionPipeline(
         use_transformer=bool(args.transformer),
         use_anomaly=bool(args.anomaly),
-        device='cpu'
+        device=args.device
     )
     pipeline.load_models(transformer_path=args.transformer, lgb_path=args.lgb, anomaly_path=args.anomaly, ensemble_path=args.ensemble)
 
