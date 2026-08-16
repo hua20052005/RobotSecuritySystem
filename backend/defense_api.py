@@ -24,6 +24,7 @@ LOG_ROOT = f"{ROBOT_ROOT}/logs"
 PACKET_ROOT = "/home/ysc/packet"
 FIREWALL_CHAIN = "JUEYING_FW"
 NORMAL_CONTROLLER_IP = "192.168.2.67"
+CONNECTION_DEFENSE_PREFLIGHT_SECONDS = 10
 
 PROCESS_PATTERNS = {
     # Bracketed expressions match the target process without matching pgrep/pkill itself.
@@ -178,7 +179,64 @@ def _stop_connection_firewall(client, password: str) -> None:
         "阶段 1/4 清理旧防火墙与 iptables 规则",
         timeout=12,
     )
-    _require_ok(result, "清理异常连接防火墙失败")
+    _require_ok(result, "清理异常连接识别拦截组件失败")
+
+
+def _start_connection_firewall_runtime(
+    client,
+    password: str,
+    *,
+    allowed_ips: tuple[str, ...] = (NORMAL_CONTROLLER_IP,),
+) -> None:
+    files = _check_files(client)
+    if not files["connection_firewall"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"机器狗缺少 {PACKET_ROOT}/udp_firewall.py，请先完成部署",
+        )
+    if not files["python"]:
+        raise HTTPException(status_code=409, detail=f"机器狗缺少可用解释器 {PYTHON}")
+
+    _stop_connection_firewall(client, password)
+    prepare = (
+        f"mkdir -p {PACKET_ROOT}; "
+        f": > {PACKET_ROOT}/firewall.log; "
+        f": > {PACKET_ROOT}/firewall_console.log"
+    )
+    _require_ok(
+        _run_stage(client, _sudo_shell(password, prepare), "准备异常连接识别日志"),
+        "准备异常连接识别日志失败",
+    )
+
+    allow_args = " ".join(f"--allow-ip {shlex.quote(ip)}" for ip in allowed_ips)
+    firewall_command = (
+        f"cd {PACKET_ROOT} && "
+        f"exec {PYTHON} {PACKET_ROOT}/udp_firewall.py "
+        f"{allow_args} "
+        f"--log-file {PACKET_ROOT}/firewall.log "
+        f">{PACKET_ROOT}/firewall_console.log 2>&1 </dev/null"
+    )
+    _require_ok(
+        _run_stage(
+            client,
+            _sudo_background(password, firewall_command),
+            "启动异常连接识别拦截组件",
+            timeout=15,
+        ),
+        "异常连接识别拦截组件启动命令失败",
+    )
+    _wait_for(
+        client,
+        f"pgrep -f {shlex.quote(PROCESS_PATTERNS['connection_firewall'])} >/dev/null",
+        8,
+        "异常连接识别拦截组件未保持运行",
+        f"{PACKET_ROOT}/firewall_console.log",
+    )
+    rule_check = f"iptables -C INPUT -p udp --dport 43893 -j {FIREWALL_CHAIN} >/dev/null 2>&1"
+    _require_ok(
+        _run_stage(client, _sudo_shell(password, rule_check), "检查异常连接拦截规则"),
+        "异常连接识别进程已启动，但拦截规则未生效",
+    )
 
 
 def _wait_for(client, condition: str, timeout_seconds: int, message: str, *log_paths: str) -> None:
@@ -231,10 +289,10 @@ def _status(client) -> Dict[str, object]:
         result = _run(client, f"pgrep -af {shlex.quote(PROCESS_PATTERNS['proxy'])} | head -n 1")
         proxy_command = str(result["stdout"])
     mode = "stopped"
-    if services["connection_firewall"]:
-        mode = "firewall"
-    elif services["proxy"]:
+    if services["proxy"]:
         mode = "transparent" if "--transparent-forward" in proxy_command else "defense"
+    elif services["connection_firewall"]:
+        mode = "firewall"
     required = ("etbert_api", "payload_bridge", "side_bridge", "proxy")
     readiness = "stopped"
     if mode == "transparent":
@@ -317,7 +375,7 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
         client = _connect(payload)
         try:
             files = _check_files(client)
-            required = ("proxy", "payload_bridge", "side_bridge", "etbert_app", "python")
+            required = ("proxy", "payload_bridge", "side_bridge", "etbert_app", "python", "connection_firewall")
             missing = [name for name in required if not files[name]]
             if missing:
                 raise HTTPException(status_code=409, detail=f"机器狗缺少防御组件：{', '.join(missing)}")
@@ -337,11 +395,21 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
                 "清理本轮实验日志失败",
             )
 
+            _start_connection_firewall_runtime(client, payload.ssh_password, allowed_ips=(NORMAL_CONTROLLER_IP,))
+            _run(
+                client,
+                f"printf '\\n[%s] preflight connection defense active for {CONNECTION_DEFENSE_PREFLIGHT_SECONDS}s\\n' "
+                f"\"$(date '+%F %T')\" >> {PACKET_ROOT}/firewall_console.log; "
+                f"sleep {CONNECTION_DEFENSE_PREFLIGHT_SECONDS}",
+                timeout=CONNECTION_DEFENSE_PREFLIGHT_SECONDS + 8,
+            )
+            _stop_connection_firewall(client, payload.ssh_password)
+
             _wait_for(
                 client,
                 "! ss -lun 2>/dev/null | grep -q ':43894 ' && ! ss -ltn 2>/dev/null | grep -q ':8010 '",
                 8,
-                "阶段 1/5：旧实验端口未能释放",
+                "阶段 1/6：旧实验端口未能释放",
             )
 
             etbert_log = f"{LOG_ROOT}/etbert_api.log"
@@ -351,12 +419,12 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
                 "--host 127.0.0.1 --port 8010",
                 etbert_log,
             )
-            _require_ok(_run(client, etbert_command), "阶段 2/5：ET-BERT API 启动命令失败")
+            _require_ok(_run(client, etbert_command), "阶段 2/6：ET-BERT API 启动命令失败")
             _wait_for(
                 client,
                 "curl -fsS --max-time 2 http://127.0.0.1:8010/health >/dev/null 2>&1",
                 120,
-                "阶段 2/5：ET-BERT API 健康检查失败",
+                "阶段 2/6：ET-BERT API 健康检查失败",
                 etbert_log,
             )
 
@@ -369,12 +437,12 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
                 f"--work-dir {ROBOT_ROOT}/tmp/robot_payload_batches",
                 payload_log,
             )
-            _require_ok(_run(client, payload_command), "阶段 3/5：载荷检测桥接启动命令失败")
+            _require_ok(_run(client, payload_command), "阶段 3/6：载荷检测桥接启动命令失败")
             _wait_for(
                 client,
                 f"pgrep -f {shlex.quote(PROCESS_PATTERNS['payload_bridge'])} >/dev/null",
                 8,
-                "阶段 3/5：载荷检测桥接退出",
+                "阶段 3/6：载荷检测桥接退出",
                 payload_log,
             )
 
@@ -385,12 +453,12 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
                 "--detection-results-file /tmp/robot_detection_results.jsonl",
                 side_log,
             )
-            _require_ok(_run(client, side_command), "阶段 4/5：侧信道检测桥接启动命令失败")
+            _require_ok(_run(client, side_command), "阶段 4/6：侧信道检测桥接启动命令失败")
             _wait_for(
                 client,
                 f"pgrep -f {shlex.quote(PROCESS_PATTERNS['side_bridge'])} >/dev/null",
                 8,
-                "阶段 4/5：侧信道检测桥接退出",
+                "阶段 4/6：侧信道检测桥接退出",
                 side_log,
             )
 
@@ -408,12 +476,12 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
                 f"--pcap-file {LOG_ROOT}/udp_defense_proxy_drop.pcap",
                 proxy_log,
             )
-            _require_ok(_run(client, proxy_command), "阶段 5/5：UDP 防御代理启动命令失败")
+            _require_ok(_run(client, proxy_command), "阶段 5/6：控制链路防御代理启动命令失败")
             _wait_for(
                 client,
                 "ss -lun 2>/dev/null | grep -q ':43894 '",
                 10,
-                "阶段 5/5：UDP 防御代理未监听 43894",
+                "阶段 5/6：控制链路防御代理未监听 43894",
                 proxy_log,
                 LOG_FILES["defense"],
             )
@@ -434,6 +502,10 @@ def start_full_defense(payload: DefenseConnection) -> Dict[str, object]:
             return {"message": "完整防御链已启动", **status}
         except HTTPException:
             _run(client, _stop_command())
+            try:
+                _stop_connection_firewall(client, payload.ssh_password)
+            except HTTPException:
+                pass
             raise
         finally:
             client.close()
@@ -444,69 +516,9 @@ def start_connection_firewall(payload: DefenseConnection) -> Dict[str, object]:
     with _LOCK:
         client = _connect(payload)
         try:
-            files = _check_files(client)
-            if not files["connection_firewall"]:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"机器狗缺少 {PACKET_ROOT}/udp_firewall.py，请先完成部署",
-                )
-            if not files["python"]:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"机器狗缺少可用解释器 {PYTHON}",
-                )
-            _run(client, _stop_command())
-            _stop_connection_firewall(client, payload.ssh_password)
-            prepare = (
-                f"mkdir -p {PACKET_ROOT}; "
-                f": > {PACKET_ROOT}/firewall.log; "
-                f": > {PACKET_ROOT}/firewall_console.log"
-            )
-            _require_ok(
-                _run_stage(
-                    client,
-                    _sudo_shell(payload.ssh_password, prepare),
-                    "阶段 2/4 准备防火墙日志",
-                ),
-                "准备异常连接防火墙日志失败",
-            )
-            firewall_command = (
-                f"cd {PACKET_ROOT} && "
-                f"exec {PYTHON} {PACKET_ROOT}/udp_firewall.py "
-                f"--allow-ip {NORMAL_CONTROLLER_IP} "
-                f"--log-file {PACKET_ROOT}/firewall.log "
-                f">{PACKET_ROOT}/firewall_console.log 2>&1 </dev/null"
-            )
-            _require_ok(
-                _run_stage(
-                    client,
-                    _sudo_background(payload.ssh_password, firewall_command),
-                    "阶段 3/4 创建独立 root 防火墙会话",
-                    timeout=15,
-                ),
-                "异常连接防火墙启动命令失败",
-            )
-            _wait_for(
-                client,
-                f"pgrep -f {shlex.quote(PROCESS_PATTERNS['connection_firewall'])} >/dev/null",
-                8,
-                "异常连接防火墙进程未保持运行",
-                f"{PACKET_ROOT}/firewall_console.log",
-            )
-            rule_check = (
-                f"iptables -C INPUT -p udp --dport 43893 -j {FIREWALL_CHAIN} "
-                ">/dev/null 2>&1"
-            )
-            _require_ok(
-                _run_stage(
-                    client,
-                    _sudo_shell(payload.ssh_password, rule_check),
-                    "阶段 4/4 检查 iptables INPUT 引用",
-                ),
-                "异常连接防火墙进程已启动，但 iptables 规则未生效",
-            )
+            _start_connection_firewall_runtime(client, payload.ssh_password, allowed_ips=(NORMAL_CONTROLLER_IP,))
             return {
-                "message": "异常连接识别防御已启动，异常来源将被实时拦截",
+                "message": "异常连接识别拦截已启动，异常来源将被实时拦截",
                 **_status(client),
             }
         except HTTPException:

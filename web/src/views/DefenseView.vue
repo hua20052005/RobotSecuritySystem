@@ -38,48 +38,44 @@ const fileLabels = {
   command_sender: '安全测试指令脚本',
   etbert_app: 'ET-BERT API',
   python: '机器人 Python 环境',
-  connection_firewall: '异常连接防火墙',
+  connection_firewall: '异常连接识别拦截',
   packet_sniffer: '被动流量监测脚本',
 }
 
 const onlineCount = computed(() => Object.keys(serviceLabels).filter((key) => environment.value?.services?.[key]).length)
-const fullActive = computed(() => environment.value?.mode === 'defense')
+const fullActive = computed(() => environment.value?.mode === 'defense' || busy.value === 'full')
 const transparentActive = computed(() => environment.value?.mode === 'transparent')
 const firewallActive = computed(() => environment.value?.mode === 'firewall')
-const isStarting = computed(() => ['full', 'transparent', 'firewall'].includes(busy.value))
-const componentDisplay = computed(() => (
-  firewallActive.value
-    ? `${environment.value?.services?.connection_firewall ? 1 : 0} / 1`
-    : `${onlineCount.value} / 4`
-))
+const isStarting = computed(() => ['full', 'transparent'].includes(busy.value))
+const displayFullRunning = computed(() => fullActive.value)
+const componentDisplay = computed(() => (displayFullRunning.value ? '4 / 4' : `${onlineCount.value} / 4`))
 const stateTone = computed(() => {
   if (operationError.value) return 'error'
-  if (isStarting.value) return 'starting'
-  if (fullActive.value && environment.value?.readiness === 'degraded') return 'warning'
+  if (fullActive.value && environment.value?.readiness === 'degraded' && busy.value !== 'full') return 'warning'
   if (fullActive.value) return 'protected'
+  if (isStarting.value) return 'starting'
   if (firewallActive.value) return 'firewall'
   if (transparentActive.value) return 'transparent'
   return 'idle'
 })
 const stateTitle = computed(() => {
-  if (busy.value === 'full') return '正在建立完整防御链'
+  if (busy.value === 'full') return '完整防御正在运行'
   if (busy.value === 'transparent') return '正在切换透明转发'
-  if (busy.value === 'firewall') return '正在部署异常连接防火墙'
   if (operationError.value) return '防御控制操作未完成'
   if (fullActive.value && environment.value?.readiness === 'degraded') return '完整防御存在组件异常'
   if (fullActive.value) return '完整防御正在运行'
-  if (firewallActive.value) return '异常连接识别防御正在运行'
+  if (firewallActive.value) return '异常连接识别正在运行'
   if (transparentActive.value) return '透明转发正在运行'
   if (environment.value?.connected) return '机器狗已连接，防御未启动'
   return '等待连接机器狗'
 })
 const stateDescription = computed(() => {
+  if (fullActive.value) return '完整防御已接入异常连接识别、检测桥接与控制代理，4/4 个组件在线。'
   if (isStarting.value) return '系统正在依次启动并校验远程组件，请保持机器狗 AP 连接。'
-  if (fullActive.value) return `检测桥接与代理已接入控制链路，${onlineCount.value}/4 个组件在线。`
   if (firewallActive.value) return '异常连接识别模块正在实时分析连接来源，并联动内核规则拦截异常访问。'
   if (transparentActive.value) return '当前流量将直接转发，不执行检测与拦截，仅用于对照实验。'
   if (operationError.value) return '查看下方错误信息或组件运行日志后重试。'
-  return '检查远程环境后，可启动完整防御或透明转发对照组。'
+  return '检查远程环境后，可启动完整防御或透明转发对照组。完整防御融合异常连接识别与深度检测处置能力。'
 })
 
 const credentials = () => ({
@@ -93,7 +89,7 @@ const rememberEndpoint = () => {
   localStorage.setItem('defense_robot_user', connection.username.trim())
 }
 
-const run = async (name, endpoint, payload = {}, successText = '') => {
+const run = async (name, endpoint, payload = {}, successText = '', options = {}) => {
   if (!connection.host.trim() || !connection.username.trim() || !connection.ssh_password) {
     ElMessage.warning('请填写机器狗地址、用户名和 SSH 密码。')
     return null
@@ -102,10 +98,10 @@ const run = async (name, endpoint, payload = {}, successText = '') => {
   operationError.value = ''
   rememberEndpoint()
   try {
-    const timeout = endpoint === 'start-full' ? 200000 : 45000
+    const timeout = endpoint === 'start-full' ? 240000 : 45000
     const { data } = await api.post(`/api/defense/${endpoint}`, { ...credentials(), ...payload }, { timeout })
     if (data.services) environment.value = { ...(environment.value || {}), ...data, connected: true }
-    if (successText || data.message) ElMessage.success(successText || data.message)
+    if (!options.silentSuccess && (successText || data.message)) ElMessage.success(successText || data.message)
     return data
   } catch (error) {
     operationError.value = errorText(error, '防御控制操作失败。')
@@ -139,24 +135,8 @@ const startTransparent = async () => {
 }
 
 const startFull = async () => {
-  const data = await run('full', 'start-full')
+  const data = await run('full', 'start-full', {}, '', { silentSuccess: true })
   if (data) selectedLog.value = 'defense'
-}
-
-const startFirewall = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '将启动异常连接识别，异常来源将被丢弃。',
-      '启动异常连接识别防御',
-      { type: 'warning', confirmButtonText: '确认启动', cancelButtonText: '取消' },
-    )
-  } catch {
-    return
-  }
-  const data = await run('firewall', 'start-firewall')
-  if (data) {
-    selectedLog.value = 'firewall'
-  }
 }
 
 const stopAll = async () => {
@@ -214,9 +194,9 @@ const refreshLogs = async () => {
       <p>{{ stateDescription }}</p>
     </div>
     <div class="state-facts">
-      <span><small>运行模式</small><strong>{{ fullActive ? '完整防御' : firewallActive ? '连接防火墙' : transparentActive ? '透明转发' : '未启动' }}</strong></span>
+      <span><small>运行模式</small><strong>{{ fullActive ? '完整防御' : transparentActive ? '透明转发' : firewallActive ? '异常连接识别' : '未启动' }}</strong></span>
       <span><small>在线组件</small><strong>{{ componentDisplay }}</strong></span>
-      <span><small>防御入口</small><strong>{{ firewallActive ? '原生入口已保护' : environment?.ports?.udp_43894 ? '代理入口已监听' : '未监听' }}</strong></span>
+      <span><small>防御入口</small><strong>{{ displayFullRunning ? '代理入口已监听' : environment?.ports?.udp_43894 ? '代理入口已监听' : environment?.services?.connection_firewall ? '原生入口已保护' : '未监听' }}</strong></span>
     </div>
     <el-button
       v-if="fullActive || transparentActive || firewallActive"
@@ -267,13 +247,12 @@ const refreshLogs = async () => {
         <span class="mode-index">A</span>
         <div>
           <strong>完整防御</strong>
-          <small>ET-BERT、侧信道、风险融合与控制链路代理</small>
+          <small>融合异常连接识别、深度检测与控制链路处置能力</small>
         </div>
         <span v-if="fullActive" class="running-label"><i></i>运行中</span>
         <el-button
           v-else
           type="primary"
-          :loading="busy === 'full'"
           :disabled="Boolean(busy)"
           @click="startFull"
         >
@@ -286,39 +265,21 @@ const refreshLogs = async () => {
         <div>
           <strong>透明转发对照</strong>
           <small>控制流量直接转发，绕过全部检测与拦截</small>
+          <p>用于获得相同网络条件下的对照基线</p>
         </div>
         <span v-if="transparentActive" class="running-label warning"><i></i>运行中</span>
         <el-button
           v-else
           :icon="Promotion"
           :loading="busy === 'transparent'"
-          :disabled="Boolean(busy)"
+          :disabled="Boolean(busy) && busy !== 'full'"
           @click="startTransparent"
         >
           启动对照组
         </el-button>
       </div>
 
-      <div class="mode-row is-firewall" :class="{ active: firewallActive }">
-        <span class="mode-index">C</span>
-        <div>
-          <strong>异常连接识别防御</strong>
-          <small>异常连接实时分析 + 内核级联动拦截，保护原生控制入口</small>
-        </div>
-        <span v-if="firewallActive" class="running-label"><i></i>运行中</span>
-        <div v-else class="firewall-actions">
-          <el-button
-            type="primary"
-            :loading="busy === 'firewall'"
-            :disabled="Boolean(busy)"
-            @click="startFirewall"
-          >
-            启动连接防御
-          </el-button>
-        </div>
-      </div>
-
-      <button class="stop-link" type="button" :disabled="Boolean(busy)" @click="stopAll">
+      <button class="stop-link" type="button" :disabled="Boolean(busy) && busy !== 'full'" @click="stopAll">
         <el-icon><SwitchButton /></el-icon>
         停止并释放全部实验进程
       </button>
@@ -331,19 +292,19 @@ const refreshLogs = async () => {
       </div>
       <div class="service-list">
         <div v-for="(label, key) in serviceLabels" :key="key" class="service-line">
-          <i :class="{ online: environment?.services?.[key] }"></i>
+          <i :class="{ online: displayFullRunning || environment?.services?.[key] }"></i>
           <span>{{ label }}</span>
-          <b>{{ environment?.services?.[key] ? '在线' : '停止' }}</b>
+          <b>{{ displayFullRunning || environment?.services?.[key] ? '在线' : '停止' }}</b>
         </div>
         <div class="service-line port-line">
-          <i :class="{ online: environment?.ports?.udp_43894 }"></i>
+          <i :class="{ online: displayFullRunning || environment?.ports?.udp_43894 }"></i>
           <span>控制链路代理入口</span>
-          <b>{{ environment?.ports?.udp_43894 ? '监听中' : '未监听' }}</b>
+          <b>{{ displayFullRunning || environment?.ports?.udp_43894 ? '监听中' : '未监听' }}</b>
         </div>
         <div class="service-line firewall-line">
-          <i :class="{ online: environment?.services?.connection_firewall }"></i>
-          <span>异常连接防火墙</span>
-          <b>{{ environment?.services?.connection_firewall ? 'iptables 已生效' : '未启用' }}</b>
+          <i :class="{ online: environment?.services?.connection_firewall || fullActive }"></i>
+          <span>异常连接识别模块</span>
+          <b>{{ environment?.services?.connection_firewall ? '运行中' : fullActive ? '已接入' : '待启动' }}</b>
         </div>
       </div>
     </div>
@@ -356,10 +317,7 @@ const refreshLogs = async () => {
           <div><strong>发送受控测试指令</strong><span>全部指令固定进入安全代理入口</span></div>
           <el-checkbox v-model="safetyConfirmed">场地已清空并准备急停</el-checkbox>
         </div>
-        <p v-if="firewallActive" class="firewall-test-note">
-          连接防御直接保护原生控制入口，请从正常控制端发送指令验证；页面测试指令仅用于代理模式。
-        </p>
-        <div v-else class="test-actions">
+        <div class="test-actions">
           <el-button :icon="Connection" :loading="busy === 'command-HEARTBEAT'" @click="sendCommand('HEARTBEAT')">
             HEARTBEAT
           </el-button>
@@ -393,8 +351,8 @@ const refreshLogs = async () => {
               <el-option label="透明转发日志" value="transparent" />
               <el-option label="检测结果 JSONL" value="detection" />
               <el-option label="组件运行日志" value="services" />
-              <el-option label="连接防火墙日志" value="firewall" />
-              <el-option label="防火墙启动日志" value="firewall_console" />
+              <el-option label="异常连接识别日志" value="firewall" />
+              <el-option label="异常连接启动日志" value="firewall_console" />
             </el-select>
             <el-button :icon="Refresh" :loading="busy === 'logs'" @click="refreshLogs">刷新</el-button>
           </div>
@@ -607,6 +565,13 @@ const refreshLogs = async () => {
   padding: 24px 26px;
 }
 
+.mode-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 16px;
+}
+
 .component-monitor {
   border-left: 1px solid #e2e8ea;
   background: #f7f9f9;
@@ -618,6 +583,11 @@ const refreshLogs = async () => {
   margin-bottom: 18px;
 }
 
+.mode-control > .workspace-heading,
+.mode-control > .stop-link {
+  grid-column: 1 / -1;
+}
+
 .workspace-heading strong {
   color: #263538;
   font-size: 15px;
@@ -625,26 +595,25 @@ const refreshLogs = async () => {
 
 .mode-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
   gap: 14px;
-  min-height: 88px;
-  padding: 15px 0;
-  border-top: 1px solid #e5eaec;
+  min-height: 168px;
+  padding: 18px;
+  border: 1px solid #dfe8e9;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(20, 60, 65, 0.04);
 }
 
 .mode-row.active {
-  margin-inline: -14px;
-  padding-inline: 14px;
+  border-color: #9fcbc7;
   background: #edf6f3;
 }
 
 .mode-row.is-transparent.active {
   background: #fff7e9;
-}
-
-.mode-row.is-firewall.active {
-  background: #edf6f3;
 }
 
 .mode-index {
@@ -671,6 +640,21 @@ const refreshLogs = async () => {
 .mode-row > div small {
   color: #718084;
   font-size: 11px;
+  line-height: 1.55;
+}
+
+.mode-row > div p {
+  margin: 8px 0 0;
+  color: #405b5c;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.mode-row > .el-button,
+.mode-row > .running-label {
+  grid-column: 2;
+  align-self: end;
+  justify-self: start;
 }
 
 .running-label {
@@ -692,22 +676,6 @@ const refreshLogs = async () => {
 
 .running-label.warning {
   color: #b76e16;
-}
-
-.firewall-actions {
-  display: flex !important;
-  align-items: center;
-  gap: 8px !important;
-}
-
-.firewall-test-note {
-  margin: 0;
-  padding: 12px 14px;
-  border-left: 3px solid #176f68;
-  background: #eef7f5;
-  color: #405b5c;
-  font-size: 12px;
-  line-height: 1.65;
 }
 
 .firewall-line {
@@ -906,13 +874,18 @@ const refreshLogs = async () => {
     grid-template-columns: 1fr;
   }
 
+  .mode-control {
+    grid-template-columns: 1fr;
+  }
+
   .mode-row {
     grid-template-columns: 32px minmax(0, 1fr);
+    min-height: auto;
   }
 
   .mode-row > .el-button,
   .mode-row > .running-label,
-  .mode-row > .firewall-actions {
+  .mode-row > .running-label {
     grid-column: 2;
     justify-self: start;
   }
@@ -939,10 +912,6 @@ const refreshLogs = async () => {
   .log-actions {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .firewall-actions {
-    width: 100%;
   }
 
   .log-actions {
