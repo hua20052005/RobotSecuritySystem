@@ -12,6 +12,7 @@ import RiskBadge from '../components/RiskBadge.vue'
 import SectionBlock from '../components/SectionBlock.vue'
 import UploadPanel from '../components/UploadPanel.vue'
 import { useSingleUpload } from '../composables/useSingleUpload'
+import { calculateUnifiedRisk } from '../lib/unifiedRiskScoring'
 
 const router = useRouter()
 const { fileList, selectedFile, handleChange, handleRemove } = useSingleUpload()
@@ -32,9 +33,9 @@ const states = reactive({
 })
 
 const dimensions = [
-  { key: 'side', label: '侧信道', description: '连接与元数据', icon: DataAnalysis },
-  { key: 'payload', label: '加密表征检测', description: '内容模式与语义表征', icon: Lock },
-  { key: 'motion', label: '动作时序', description: '行为与流程', icon: Connection },
+  { key: 'side', label: '连接行为感知', description: '连接结构与通信节律', icon: DataAnalysis },
+  { key: 'payload', label: '载荷模式研判', description: '内容模式与语义表征', icon: Lock },
+  { key: 'motion', label: '动作流程校验', description: '动作事件与流程约束', icon: Connection },
 ]
 
 const selectedCount = computed(() => Object.values(enabled).filter(Boolean).length)
@@ -106,12 +107,25 @@ const dimensionSummary = computed(() => ({
   },
 }))
 
+const riskScoring = computed(() => calculateUnifiedRisk({
+  enabled: { ...enabled },
+  dimensions: {
+    side: { status: dimensionStatus('side'), state: states.side.state, result: states.side.result },
+    payload: { status: dimensionStatus('payload'), state: states.payload.state, result: states.payload.result },
+    motion: { status: dimensionStatus('motion'), state: states.motion.state, result: states.motion.result },
+  },
+}))
+
 const unifiedJson = computed(() => ({
   task_id: taskId.value,
   generated_at: new Date().toISOString(),
   file: selectedFile.value ? { name: selectedFile.value.name, size: selectedFile.value.size } : null,
   overall_status: overallStatus.value,
+  overall_score: riskScoring.value.score,
+  overall_score_percent: riskScoring.value.score_percent,
+  risk_level: riskScoring.value.level,
   configuration: { enabled: { ...enabled }, payload_mode: payloadMode.value, scenario: scenario.value },
+  risk_scoring: riskScoring.value,
   dimensions: {
     side_channel: { status: dimensionStatus('side'), error: states.side.error || null, technical_error: states.side.technicalError || null, result: states.side.result },
     payload: { status: dimensionStatus('payload'), error: states.payload.error || null, technical_error: states.payload.technicalError || null, result: states.payload.result },
@@ -137,18 +151,18 @@ const requestDimension = async (key) => {
       const data = freshForm()
       data.append('features', JSON.stringify(['size', 'interval', 'port']))
       data.append('contamination', '0.06')
-      response = await api.post('/api/side-channel/analyze', data, { timeout: 600000 })
+      response = await api.post('/api/side-channel/analyze', data)
     } else if (key === 'payload') {
-      const health = await api.get('/health', { timeout: 5000 })
+      const health = await api.get('/health')
       const payloadReady = health.data?.payload_available
         ?? health.data?.etbert_models?.[payloadMode.value]
         ?? health.data?.etbert_available
       if (!payloadReady) {
-        throw new Error('加密表征检测模型或服务尚未就绪')
+        throw new Error('载荷模式研判模型或服务尚未就绪')
       }
       const data = freshForm()
-      data.append('max_packets', '500')
-      response = await api.post(`/api/etbert/detect/${payloadMode.value}`, data, { timeout: 600000 })
+      data.append('max_packets', '50000')
+      response = await api.post(`/api/etbert/detect/${payloadMode.value}`, data)
     } else {
       const data = freshForm()
       data.append('mode', 'sequence')
@@ -158,7 +172,7 @@ const requestDimension = async (key) => {
       data.append('min_segment_s', '0.25')
       data.append('step_s', '0.5')
       data.append('segment_penalty', '0.02')
-      response = await api.post('/api/motion-recognition/recognize', data, { timeout: 600000 })
+      response = await api.post('/api/motion-recognition/recognize', data)
     }
     states[key].result = response.data
     states[key].state = 'DONE'
@@ -167,7 +181,7 @@ const requestDimension = async (key) => {
     const detail = error.response?.data?.detail || error.message || '检测失败'
     states[key].technicalError = typeof detail === 'string' ? detail : JSON.stringify(detail)
     states[key].error = key === 'payload'
-      ? '加密表征检测暂不可用，已保留其他维度结果。'
+      ? '载荷模式研判暂不可用，已保留其他维度结果。'
       : `${dimensions.find((item) => item.key === key)?.label || '检测'}未完成`
   } finally {
     states[key].elapsed = Math.round(performance.now() - startedAt)
@@ -219,7 +233,7 @@ const toggleDimension = (key) => {
 
 <template>
   <ModuleHero
-    objective="从连接侧信道、加密流量表征和动作流程三个维度形成统一风险结论"
+    objective="从连接行为、载荷模式和动作流程三个维度形成统一风险结论"
     input="一份机器人控制链路 PCAP"
     output="统一状态、分维指标与完整证据 JSON"
     scenario="比赛演示、现场排查与综合分析"
@@ -237,7 +251,7 @@ const toggleDimension = (key) => {
         />
         <div class="unified-options">
           <label class="control-field">
-            <span>加密表征检测粒度</span>
+            <span>载荷研判粒度</span>
             <el-segmented v-model="payloadMode" :options="[{ label: '包级', value: 'packet' }, { label: '流级', value: 'flow' }]" />
           </label>
           <label class="control-field">
@@ -292,9 +306,19 @@ const toggleDimension = (key) => {
         :description="overallMeta[1]"
         :advice="errorCount ? '部分维度未完成，请结合分维证据复核。' : overallStatus === 'ANOMALY' ? '建议进入防御控制台或查看异常维度原始证据。' : '可进入单项模块查看更详细的检测证据。'"
         :task-id="taskId"
-        :duration="running ? '运行中' : `${(elapsedMs / 1000).toFixed(2)} s`"
       />
     </div>
+
+    <section class="unified-score-panel fade-in">
+      <div>
+        <span class="score-kicker">综合风险评分</span>
+        <strong>{{ running ? '计算中' : `${riskScoring.score_percent}%` }}</strong>
+        <p>{{ riskScoring.level_label }} · {{ riskScoring.formula_brief }}</p>
+      </div>
+      <div class="score-meter" aria-hidden="true">
+        <span :style="{ width: running ? '48%' : `${riskScoring.score_percent}%` }"></span>
+      </div>
+    </section>
 
     <div class="grid-3 unified-metrics">
       <MetricCard
@@ -473,8 +497,61 @@ const toggleDimension = (key) => {
   font-size: 10px;
 }
 
+.unified-score-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.36fr);
+  gap: 20px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(232, 244, 243, 0.88), rgba(255, 255, 255, 0.96)),
+    var(--surface);
+  box-shadow: 0 8px 24px rgba(20, 60, 65, 0.05);
+}
+
+.score-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.unified-score-panel strong {
+  display: block;
+  color: var(--ink);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.unified-score-panel p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.score-meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eff0;
+}
+
+.score-meter span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #63b4b3, #d89559);
+  transition: width 0.28s ease;
+}
+
 .unified-metrics {
-  margin-top: -7px;
+  margin-top: 16px;
 }
 
 .dimension-result-list {
@@ -526,6 +603,10 @@ const toggleDimension = (key) => {
 
 @media (max-width: 900px) {
   .unified-entry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .unified-score-panel {
     grid-template-columns: 1fr;
   }
 }

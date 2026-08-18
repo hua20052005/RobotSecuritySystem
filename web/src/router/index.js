@@ -16,9 +16,9 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: HomeView },
-    { path: '/unified-analysis', name: 'unified-analysis', component: UnifiedAnalysisView, meta: { title: '三维统一安全分析', description: '上传一次 PCAP，并行完成连接侧信道、加密流量表征和动作时序检测。' } },
-    { path: '/side-channel', name: 'side-channel', component: SideChannelView, meta: { title: '侧信道流量分析', description: '从通信元数据、IP 与端口行为中定位可疑连接和异常数据包。' } },
-    { path: '/payload', name: 'payload', component: EtBertView, meta: { title: '加密流量表征检测', description: '通过包级与流级载荷接口识别异常内容模式，并显示当前实际检测引擎。' } },
+    { path: '/unified-analysis', name: 'unified-analysis', component: UnifiedAnalysisView, meta: { title: '三维统一安全分析', description: '上传一次 PCAP，并行完成连接行为感知、载荷模式研判和动作流程校验。' } },
+    { path: '/side-channel', name: 'side-channel', component: SideChannelView, meta: { title: '连接行为感知', description: '从通信元数据、连接画像与端口行为中定位可疑来源和异常通信。' } },
+    { path: '/payload', name: 'payload', component: EtBertView, meta: { title: '载荷模式研判', description: '通过包级与流级载荷接口识别异常内容模式，并显示当前实际检测引擎。' } },
     { path: '/motion', name: 'motion', component: MotionView, meta: { title: '动作序列识别与异常分析', description: '恢复机器狗动作时间线，并检查上下文转移与任务流程一致性。' } },
     { path: '/defense', name: 'defense', component: DefenseView, meta: { title: '系统集成防御', description: '通过受控 SSH 通道管理透明转发、完整防御链和安全验证指令。' } },
     { path: '/papb', redirect: '/motion' },

@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 
 import api from '../api/client'
 import JsonViewer from '../components/JsonViewer.vue'
-import LiveCapturePanel from '../components/LiveCapturePanel.vue'
+import ExperimentalDeviceAccessPanel from '../components/ExperimentalDeviceAccessPanel.vue'
 import MetricCard from '../components/MetricCard.vue'
 import ModuleHero from '../components/ModuleHero.vue'
 import ResultSummary from '../components/ResultSummary.vue'
@@ -16,7 +16,7 @@ import UploadPanel from '../components/UploadPanel.vue'
 const fileList = ref([])
 const selectedFile = ref(null)
 const modelMode = ref('packet')
-const maxPackets = ref(500)
+const maxPackets = ref(50000)
 const loading = ref(false)
 const reportLoading = ref(false)
 const result = ref(null)
@@ -137,7 +137,7 @@ const runDetection = async () => {
   try {
     const { data } = await api.post(url, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
+      timeout: 900000,
     })
     result.value = data
     elapsedMs.value = Math.round(performance.now() - startedAt)
@@ -183,7 +183,7 @@ const downloadReport = async () => {
   try {
     const { data } = await api.post(url, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
+      timeout: 900000,
     })
     const rows = data.report || []
     let csv = 'packet_index,protocol,anomaly_prob\n'
@@ -321,10 +321,10 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
 
 <template>
   <ModuleHero
-    objective="识别控制流量中的异常载荷表征与通信模式"
-    input="PCAP / PCAPNG 加密流量"
+    objective="研判控制流量中的载荷模式偏离与异常内容结构"
+    input="PCAP / PCAPNG 控制链路流量"
     output="异常类别、置信度与样本证据"
-    scenario="加密控制链路内容模式检测"
+    scenario="载荷模式研判与内容结构复核"
   />
   <SectionBlock
     title="检测配置"
@@ -388,7 +388,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
           <el-input-number v-model="maxPackets" :min="100" :step="500" :max="50000" />
         </label>
       </div>
-      <LiveCapturePanel
+      <ExperimentalDeviceAccessPanel
         endpoint="/api/etbert/live"
         expected-module="payload"
         :extra-config="liveExtraConfig"
@@ -410,7 +410,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', handleResize); disp
         :description="summaryText.advice"
         :advice="summaryText.abnormal > 0 ? '查看异常类别和低置信度样本，必要时导出报告复核。' : '保留检测记录并持续监控该控制链路。'"
         :task-id="result.run_id"
-        :duration="`${(elapsedMs / 1000).toFixed(2)} s`"
       >
         <template #actions>
           <el-button :loading="reportLoading" @click="downloadReport">{{ reportLoading ? '生成中' : '导出报告' }}</el-button>

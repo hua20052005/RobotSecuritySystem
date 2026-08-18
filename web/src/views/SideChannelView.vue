@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import api from '../api/client'
 import JsonViewer from '../components/JsonViewer.vue'
-import LiveCapturePanel from '../components/LiveCapturePanel.vue'
+import ExperimentalDeviceAccessPanel from '../components/ExperimentalDeviceAccessPanel.vue'
 import MarkdownReport from '../components/MarkdownReport.vue'
 import MetricCard from '../components/MetricCard.vue'
 import ModuleHero from '../components/ModuleHero.vue'
@@ -68,7 +68,6 @@ const judgeResult = ref(null)
 const judgeSummary = computed(() => judgeResult.value?.summary || null)
 const judgeMeta = computed(() => judgeResult.value?.llm || null)
 const judgeGroups = computed(() => judgeResult.value?.groups || [])
-const verdictSourceLabel = { rule: '规则', llm: 'AI', default: '待复核' }
 const abnormalConnections = computed(() => {
   if (judgeSummary.value?.total_groups != null) return Number(judgeSummary.value.total_groups)
   const keys = new Set((anomalyTable.value.rows || []).map((row) => `${row.src || ''}->${row.dst || ''}`))
@@ -390,10 +389,10 @@ watch(activeTab, async () => {
 
 <template>
   <ModuleHero
-    objective="从包长、方向、间隔和连接画像中发现离群通信"
+    objective="从连接结构、通信节律和交互形态中发现异常连接行为"
     input="PCAP / PCAPNG 元数据"
-    output="异常包、异常连接与二次研判结论"
-    scenario="非侵入式控制链路流量分析"
+    output="异常候选、连接画像与二次研判结论"
+    scenario="连接行为感知与异常来源分析"
   />
   <section
     class="panel fade-in"
@@ -404,7 +403,7 @@ watch(activeTab, async () => {
     <div class="section-header">
       <div>
         <h2 class="section-title">分析输入</h2>
-        <p class="panel-sub">上传流量文件，选择用于 IsolationForest 的侧信道特征，并可指定需要重点追踪的目的 IP。</p>
+        <p class="panel-sub">上传流量文件，选择用于 IsolationForest 的侧信道特征，生成连接画像与异常候选。</p>
       </div>
       <div class="pill-badge">PCAP / PCAPNG</div>
     </div>
@@ -470,7 +469,7 @@ watch(activeTab, async () => {
         <label class="control-field">
         </label>
       </div>
-      <LiveCapturePanel
+      <ExperimentalDeviceAccessPanel
         endpoint="/api/side-channel/live"
         expected-module="side_channel"
         :extra-config="liveExtraConfig"
@@ -646,11 +645,6 @@ watch(activeTab, async () => {
         <el-table-column prop="port_count" label="端口数" min-width="90" sortable />
         <el-table-column prop="ports" label="端口" min-width="140" show-overflow-tooltip />
         <el-table-column prop="services" label="服务" min-width="120" show-overflow-tooltip />
-        <el-table-column label="依据" min-width="90">
-          <template #default="{ row }">
-            {{ verdictSourceLabel[row.verdict_source] || verdictSourceLabel.default }}
-          </template>
-        </el-table-column>
         <el-table-column prop="reason" label="理由" min-width="240" show-overflow-tooltip />
         <el-table-column prop="confidence" label="置信度" min-width="90" sortable />
       </el-table>

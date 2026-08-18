@@ -12,6 +12,13 @@ sys.path.append(str(ROOT / ".venv" / "Lib" / "site-packages"))
 import uvicorn
 
 
+def _parse_env_value(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
 def load_dotenv(path: Path = ROOT / ".env") -> None:
     if not path.exists():
         return
@@ -21,7 +28,7 @@ def load_dotenv(path: Path = ROOT / ".env") -> None:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
-        value = value.strip().strip('"').strip("'")
+        value = _parse_env_value(value)
         if key and key not in os.environ:
             os.environ[key] = value
 
@@ -29,12 +36,9 @@ def load_dotenv(path: Path = ROOT / ".env") -> None:
 def choose_port(candidates: tuple[int, ...] = (8010, 8011, 8012, 8013)) -> int:
     for port in candidates:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                sock.bind(("127.0.0.1", port))
-            except OSError:
-                continue
-            return port
+            sock.settimeout(0.5)
+            if sock.connect_ex(("127.0.0.1", port)) != 0:
+                return port
     raise RuntimeError("No available backend port found in 8010-8013.")
 
 

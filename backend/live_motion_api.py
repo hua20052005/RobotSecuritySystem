@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -36,6 +37,15 @@ payload_router = APIRouter(prefix="/api/etbert/live", tags=["payload-live"])
 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.:@-]+$")
 ALLOWED_SCENARIOS = {"general", "patrol", "interaction", "performance"}
+DEFAULT_DEVICE_PASSWORD = os.getenv("ROBOGUARD_DEVICE_PASSWORD", "").strip()
+DEFAULT_SSH_PASSWORD = os.getenv(
+    "ROBOGUARD_DEVICE_SSH_PASSWORD",
+    DEFAULT_DEVICE_PASSWORD,
+).strip()
+DEFAULT_SUDO_PASSWORD = os.getenv(
+    "ROBOGUARD_DEVICE_SUDO_PASSWORD",
+    DEFAULT_DEVICE_PASSWORD,
+).strip()
 
 
 class LiveStartRequest(BaseModel):
@@ -423,12 +433,14 @@ def _config_from_payload(payload: LiveStartRequest, module: str) -> LiveConfig:
         raise HTTPException(status_code=400, detail="实时动作监测当前仅支持可信控制流事件提取方式")
     if payload.model_mode not in {"packet", "flow"}:
         raise HTTPException(status_code=400, detail="model_mode 必须为 packet 或 flow")
+    ssh_password = payload.ssh_password.strip() or DEFAULT_SSH_PASSWORD
+    sudo_password = payload.sudo_password.strip() or DEFAULT_SUDO_PASSWORD or ssh_password
     return LiveConfig(
         host=_safe(payload.host, "host"),
         username=_safe(payload.username, "username"),
         interface=_safe(payload.interface, "interface"),
-        ssh_password=payload.ssh_password,
-        sudo_password=payload.sudo_password,
+        ssh_password=ssh_password,
+        sudo_password=sudo_password,
         capture_seconds=float(payload.capture_seconds),
         scenario=scenario,
         method=payload.method,
